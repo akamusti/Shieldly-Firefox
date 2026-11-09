@@ -4,25 +4,50 @@
   <meta charset="utf-8" />
   <title>Privacy Shield — Advanced</title>
   <style>
-    body { max-width: 720px; margin: 24px auto; padding: 0 16px; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
+    body { max-width: 760px; margin: 24px auto; padding: 0 16px; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
     h1 { font-size: 20px; }
-    h2 { font-size: 15px; margin-top: 24px; color: #7dd3fc; }
+    h2 { font-size: 15px; margin-top: 26px; color: #7dd3fc; }
     label { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: 14px; }
+    input[type="text"], input[type="url"] { flex: 1; background: #171a21; color: #e6e6e6; border: 1px solid #3a4050; border-radius: 6px; padding: 7px; }
     textarea { width: 100%; min-height: 120px; background: #171a21; color: #e6e6e6; border: 1px solid #3a4050; border-radius: 6px; padding: 8px; }
     button { background: #2a2f3a; color: #e6e6e6; border: 1px solid #3a4050; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #343b48; }
     .muted { color: #9aa0a6; font-size: 12px; }
+    .list-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #1f242e; }
+    .list-row .meta { flex: 1; min-width: 0; }
+    .list-row .name { font-size: 14px; }
+    .list-row .status { font-size: 11px; color: #9aa0a6; word-break: break-all; }
+    .list-row .status.error { color: #fca5a5; }
+    .add-row { display: flex; gap: 8px; margin-top: 10px; }
+    .site-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #1f242e; }
+    .site-row .host { flex: 1; font-size: 14px; }
+    .chip { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #1f2937; color: #9aa0a6; }
+    .chip.on { background: #14351f; color: #86efac; }
+    .chip.off { background: #3a1d1d; color: #fca5a5; }
   </style>
 </head>
 <body>
   <h1>Privacy Shield — Advanced</h1>
 
   <h2>Filter lists</h2>
-  <label><input type="checkbox" id="easylist" /> EasyList (ads)</label>
-  <label><input type="checkbox" id="easyprivacy" /> EasyPrivacy (trackers)</label>
+  <div id="lists"></div>
+  <div class="add-row">
+    <input type="text" id="listName" placeholder="List name (optional)" />
+    <input type="url" id="listUrl" placeholder="https://example.com/filters.txt" />
+    <button id="addList">Add list</button>
+  </div>
+  <div class="add-row">
+    <button id="refreshLists">Refresh lists now</button>
+    <span id="listMessage" class="muted"></span>
+  </div>
 
-  <h2>Privacy controls</h2>
+  <h2>Privacy controls (global defaults)</h2>
   <label><input type="checkbox" id="cookieProtection" /> Block third-party cookies</label>
   <label><input type="checkbox" id="scriptControl" /> Block third-party scripts</label>
+
+  <h2>Site controls</h2>
+  <p class="muted">Per-site overrides. “Reset” removes the override and returns the site to global defaults.</p>
+  <div id="sites"></div>
 
   <h2>Custom rules</h2>
   <p class="muted">One rule per line, e.g. <code>||ads.example.com^</code></p>

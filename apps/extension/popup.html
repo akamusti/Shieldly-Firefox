@@ -4,12 +4,16 @@
   <meta charset="utf-8" />
   <title>Privacy Shield</title>
   <style>
-    body { width: 300px; padding: 12px; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
+    body { width: 320px; padding: 12px; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
     h1 { font-size: 16px; margin: 0 0 8px; }
+    h2 { font-size: 12px; margin: 14px 0 2px; color: #7dd3fc; text-transform: uppercase; letter-spacing: .04em; }
     .row { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
     button { background: #2a2f3a; color: #e6e6e6; border: 1px solid #3a4050; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+    button.off { color: #fca5a5; }
+    button.on { color: #86efac; }
     .stat { font-size: 13px; color: #9aa0a6; }
     .site { font-size: 12px; color: #7dd3fc; word-break: break-all; }
+    .hint { color: #6b7280; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -18,12 +22,28 @@
     <span>Protection</span>
     <button id="toggle">On</button>
   </div>
+  <div class="stat">Blocked requests: <span id="count">0</span></div>
+
+  <h2>Current site</h2>
+  <div class="site" id="site"></div>
   <div class="row">
-    <span>Current site</span>
+    <span>Protection</span>
     <button id="siteToggle">Enabled</button>
   </div>
-  <div class="site" id="site"></div>
-  <div class="stat">Blocked requests: <span id="count">0</span></div>
+  <div class="row">
+    <span>Block cookies</span>
+    <button id="siteCookies">Default</button>
+  </div>
+  <div class="row">
+    <span>Block scripts</span>
+    <button id="siteScripts">Default</button>
+  </div>
+  <div class="row">
+    <span>Hide ads</span>
+    <button id="siteCosmetic">Default</button>
+  </div>
+  <div class="hint">Site settings override the global defaults.</div>
+
   <div class="row"><button id="picker">Pick element</button></div>
   <div class="row"><a href="options.html" target="_blank" style="color:#7dd3fc;font-size:13px;">Advanced settings</a></div>
   <script src="popup.js"></script>

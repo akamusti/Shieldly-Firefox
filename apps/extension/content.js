@@ -6,11 +6,33 @@
     return host === entryHost || host.endsWith('.' + entryHost);
   }
 
+  function selectorsFor(entries, host) {
+    const selectors = [];
+    for (const entry of entries) {
+      const idx = entry.indexOf('##');
+      if (idx < 0) continue;
+      const entryHost = entry.slice(0, idx);
+      const selector = entry.slice(idx + 2);
+      if (matchesHost(entryHost, host)) selectors.push(selector);
+    }
+    return selectors;
+  }
+
   async function apply() {
-    const { enabled = true, disabledSites = [], cosmeticSelectors = [] } = await browser.storage.local.get(['enabled', 'disabledSites', 'cosmeticSelectors']);
+    const {
+      enabled = true,
+      disabledSites = [],
+      siteSettings = {},
+      cosmeticSelectors = [],
+      customCosmetic = [],
+    } = await browser.storage.local.get([
+      'enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'customCosmetic',
+    ]);
     const host = location.hostname;
-    const siteDisabled = disabledSites.includes(host);
-    const shouldApply = enabled && !siteDisabled;
+    const site = siteSettings[host] || {};
+    const siteDisabled = disabledSites.includes(host) || site.enabled === false;
+    const cosmeticEnabled = typeof site.cosmeticFiltering === 'boolean' ? site.cosmeticFiltering : true;
+    const shouldApply = enabled && !siteDisabled && cosmeticEnabled;
 
     let style = document.getElementById(STYLE_ID);
     if (!shouldApply) {
@@ -18,14 +40,10 @@
       lastCss = '';
       return;
     }
-    const selectors = [];
-    for (const entry of cosmeticSelectors) {
-      const idx = entry.indexOf('##');
-      if (idx < 0) continue;
-      const entryHost = entry.slice(0, idx);
-      const selector = entry.slice(idx + 2);
-      if (matchesHost(entryHost, host)) selectors.push(selector);
-    }
+    const selectors = [
+      ...selectorsFor(cosmeticSelectors, host),
+      ...selectorsFor(customCosmetic, host),
+    ];
     const css = selectors.map((s) => `${s} { display: none !important; }`).join('\n');
     if (css === lastCss) return;
     lastCss = css;
@@ -39,7 +57,10 @@
 
   apply();
   browser.storage.onChanged.addListener((changes) => {
-    if (changes.enabled || changes.disabledSites || changes.cosmeticSelectors || changes.customCosmetic) {
+    if (
+      changes.enabled || changes.disabledSites || changes.siteSettings ||
+      changes.cosmeticSelectors || changes.customCosmetic
+    ) {
       apply();
     }
   });
@@ -99,18 +120,5 @@
       document.addEventListener('mouseover', onOver, true);
       document.addEventListener('click', onClick, true);
     }
-  });
-
-  browser.storage.local.get('customCosmetic').then(({ customCosmetic = [] }) => {
-    if (!customCosmetic.length) return;
-    const host = location.hostname;
-    const selectors = customCosmetic
-      .filter((entry) => entry.startsWith(host + '##'))
-      .map((entry) => entry.slice(entry.indexOf('##') + 2));
-    if (!selectors.length) return;
-    const css = selectors.map((s) => `${s} { display: none !important; }`).join('\n');
-    const style = document.createElement('style');
-    style.textContent = css;
-    (document.head || document.documentElement).appendChild(style);
   });
 })();
