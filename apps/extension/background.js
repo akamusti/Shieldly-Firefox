@@ -26,7 +26,8 @@ async function fetchLists() {
       for (const raw of text.split(/\r?\n/)) {
         const line = raw.trim();
         if (!line || line.startsWith('!') || line.startsWith('[') || line.startsWith('@@')) continue;
-        const dm = line.match(/^\|\|([^\^\/\s]+)\^?/);
+        if (line.includes('$')) continue;
+        const dm = line.match(/^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\^/);
         if (dm) domains.add(dm[1]);
         const cm = line.match(/##(.+)$/);
         if (cm && cm[1]) selectors.push(cm[1]);
@@ -39,6 +40,8 @@ async function fetchLists() {
   await browser.storage.local.set({ cosmeticSelectors: Array.from(new Set(selectors)) });
   await refreshState();
 }
+
+browser.runtime.onStartup.addListener(async () => { await fetchLists(); });
 
 browser.runtime.onInstalled.addListener(async () => {
   const st = await browser.storage.local.get('enabled');
