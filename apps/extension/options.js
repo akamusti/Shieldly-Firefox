@@ -21,4 +21,27 @@ save.addEventListener('click', async () => {
   setTimeout(() => { saved.textContent = ''; }, 3000);
 });
 
+const logEl = document.getElementById('log');
+const clearLog = document.getElementById('clearLog');
+
+async function renderLog() {
+  const { requestLog = [] } = await browser.storage.local.get('requestLog');
+  logEl.innerHTML = '';
+  for (const entry of requestLog.slice(0, 100)) {
+    const li = document.createElement('li');
+    li.textContent = `${new Date(entry.time).toLocaleTimeString()} — ${entry.url}`;
+    logEl.appendChild(li);
+  }
+}
+
+clearLog.addEventListener('click', async () => {
+  await browser.storage.local.set({ requestLog: [] });
+  renderLog();
+});
+
+browser.storage.onChanged.addListener((changes) => {
+  if (changes.requestLog) renderLog();
+});
+
 load();
+renderLog();

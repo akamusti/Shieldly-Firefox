@@ -2,6 +2,7 @@ const toggle = document.getElementById('toggle');
 const siteToggle = document.getElementById('siteToggle');
 const countEl = document.getElementById('count');
 const siteEl = document.getElementById('site');
+const picker = document.getElementById('picker');
 
 async function currentHost() {
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
@@ -33,6 +34,15 @@ siteToggle.addEventListener('click', async () => {
     : [...disabledSites, host];
   await browser.storage.local.set({ disabledSites: next });
   siteToggle.textContent = next.includes(host) ? 'Disabled' : 'Enabled';
+});
+
+picker.addEventListener('click', async () => {
+  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+  const tab = tabs[0];
+  if (tab && tab.id) {
+    browser.tabs.sendMessage(tab.id, { type: 'startPicker' });
+    window.close();
+  }
 });
 
 load();

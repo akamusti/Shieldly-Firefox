@@ -104,8 +104,9 @@ browser.webRequest.onBeforeRequest.addListener(
     try { initiatorHost = new URL(initiator).hostname; } catch { return {}; }
     if (sameSite(initiatorHost, host)) return {};
     if (isBlockedHost(host)) {
-      browser.storage.local.get('blocked').then(({ blocked = 0 }) => {
-        browser.storage.local.set({ blocked: blocked + 1 });
+      browser.storage.local.get(['blocked', 'requestLog']).then(({ blocked = 0, requestLog = [] }) => {
+        requestLog.unshift({ url: details.url, time: Date.now() });
+        browser.storage.local.set({ blocked: blocked + 1, requestLog: requestLog.slice(0, 200) });
       });
       return { cancel: true };
     }
