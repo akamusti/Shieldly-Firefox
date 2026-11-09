@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Privacy Shield",
+  "version": "0.0.0",
+  "description": "Advanced privacy & adblock engine (Firefox).",
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Privacy Shield"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "privacy-shield@privacy-shield"
+    }
+  }
+}
