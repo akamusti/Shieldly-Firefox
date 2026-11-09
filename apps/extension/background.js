@@ -1,3 +1,5 @@
+const BLOCKED_DOMAINS = ['doubleclick.net', 'googlesyndication.com'];
+
 browser.runtime.onInstalled.addListener(async () => {
   const { enabled } = await browser.storage.local.get('enabled');
   if (enabled === undefined) {
@@ -6,10 +8,19 @@ browser.runtime.onInstalled.addListener(async () => {
   console.log('Privacy Shield (Firefox) installed.');
 });
 
-browser.runtime.onMessage.addListener((msg) => {
-  if (msg && msg.type === 'incrementBlocked') {
-    return browser.storage.local.get('blocked').then(({ blocked = 0 }) => {
-      return browser.storage.local.set({ blocked: blocked + 1 }).then(() => ({ ok: true }));
-    });
-  }
-});
+browser.webRequest.onBeforeRequest.addListener(
+  (details) => {
+    try {
+      const url = new URL(details.url);
+      if (BLOCKED_DOMAINS.some((d) => url.hostname === d || url.hostname.endsWith('.' + d))) {
+        browser.storage.local.get('blocked').then(({ blocked = 0 }) => {
+          browser.storage.local.set({ blocked: blocked + 1 });
+        });
+        return { cancel: true };
+      }
+    } catch (e) {}
+    return {};
+  },
+  { urls: ['<all_urls>'] },
+  ['blocking']
+);
