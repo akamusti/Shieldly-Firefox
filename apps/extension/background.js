@@ -1,6 +1,6 @@
 const LISTS = [
-  'https://easylist.to/easylist/easylist.txt',
-  'https://easylist.to/easylist/easyprivacy.txt',
+  { id: 'easylist', url: 'https://easylist.to/easylist/easylist.txt' },
+  { id: 'easyprivacy', url: 'https://easylist.to/easylist/easyprivacy.txt' },
 ];
 
 let blockedDomains = new Set();
@@ -34,7 +34,11 @@ async function refreshState(keys) {
 async function fetchLists() {
   const selectors = new Set();
   const domains = new Set();
-  for (const url of LISTS) {
+  const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '' } =
+    await browser.storage.local.get(['filterLists', 'customRulesText']);
+  for (const list of LISTS) {
+    if (filterLists[list.id] === false) continue;
+    const url = list.url;
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
@@ -56,6 +60,11 @@ async function fetchLists() {
       console.warn('List fetch failed', url, e);
     }
   }
+  for (const raw of customRulesText.split(/\r?\n/)) {
+    const line = raw.trim();
+    const dm = line.match(/^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\^/);
+    if (dm) domains.add(dm[1]);
+  }
   blockedDomains = domains;
   await browser.storage.local.set({ cosmeticSelectors: Array.from(selectors) });
   await refreshState();
@@ -73,6 +82,10 @@ browser.runtime.onInstalled.addListener(async () => {
 });
 
 browser.storage.onChanged.addListener((changes) => {
+  if (changes.filterLists || changes.customRulesText) {
+    fetchLists();
+    return;
+  }
   const relevant = Object.keys(changes).filter((k) => ['enabled', 'disabledSites', 'cosmeticSelectors'].includes(k));
   if (relevant.length) refreshState(relevant);
 });
