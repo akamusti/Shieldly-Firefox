@@ -4,57 +4,247 @@
   <meta charset="utf-8" />
   <title>Privacy Shield</title>
   <style>
-    body { width: 300px; margin: 0; padding: 12px; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
-    .header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-    h1 { font-size: 16px; font-weight: 600; margin: 0; }
-    h2 { font-size: 13px; font-weight: 600; margin: 16px 0 2px; color: #7dd3fc; }
-    label { display: flex; gap: 8px; align-items: center; margin: 7px 0; font-size: 13.5px; cursor: pointer; }
-    label:has(input:disabled) { cursor: default; opacity: 0.6; }
-    input[type="checkbox"] { margin: 0; }
-    button { background: #2a2f3a; color: #e6e6e6; border: 1px solid #3a4050; padding: 6px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; }
-    button:hover:not(:disabled) { background: #343b48; }
-    button:disabled { cursor: default; opacity: 0.5; }
-    .muted { color: #9aa0a6; font-size: 11.5px; }
-    .site { font-size: 13px; color: #7dd3fc; word-break: break-all; }
-    .site-state { font-size: 12px; color: #9aa0a6; margin-top: 2px; }
-    .site-state.active { color: #7dd3fc; }
-    .stats { display: grid; gap: 3px; margin-top: 8px; font-size: 12.5px; color: #9aa0a6; }
-    .stats .value { color: #e6e6e6; }
-    .actions { display: flex; gap: 8px; margin-top: 12px; }
-    .link { display: inline-block; margin-top: 10px; color: #7dd3fc; font-size: 12.5px; text-decoration: none; }
-    .link:hover { text-decoration: underline; }
+    :root {
+      --bg: #0f1115;
+      --panel: #121924;
+      --panel-2: #18212f;
+      --border: #243044;
+      --border-soft: rgba(36, 48, 68, 0.7);
+      --text: #e6e6e6;
+      --muted: #8b9bb0;
+      --accent: #2dd4bf;
+      --accent-soft: rgba(45, 212, 191, 0.13);
+      --danger: #f87171;
+      --danger-soft: rgba(248, 113, 113, 0.12);
+      --cyan: #7dd3fc;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      width: 320px;
+      padding: 12px;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .brand { display: flex; align-items: center; gap: 9px; }
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      background: rgba(45, 212, 191, 0.08);
+      color: var(--accent);
+    }
+    .mark svg { width: 16px; height: 16px; }
+    .title { font-size: 13.5px; font-weight: 600; line-height: 1.2; }
+    .version { margin-top: 1px; font-size: 10.5px; color: var(--muted); }
+
+    .site-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel);
+    }
+    .site { font-size: 14px; font-weight: 600; line-height: 1.3; word-break: break-all; }
+    .site-state { margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+    .site-state.active { color: var(--accent); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 500;
+      transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+    }
+    .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+    .pill[data-on="true"] { color: var(--accent); border-color: rgba(45, 212, 191, 0.35); background: var(--accent-soft); }
+    .pill[data-on="false"] { color: var(--danger); border-color: rgba(248, 113, 113, 0.32); background: var(--danger-soft); }
+    .pill:disabled { opacity: 0.5; cursor: default; }
+
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+    .stat {
+      padding: 8px 6px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      text-align: center;
+    }
+    .stat-value { display: block; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+    .stat-label { display: block; margin-top: 1px; font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+
+    .section-title { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: var(--cyan); }
+    .panel { padding: 2px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border-soft); }
+    .row:first-child { border-top: none; }
+    .row-label { font-size: 12.5px; }
+
+    .switch {
+      position: relative;
+      flex: 0 0 auto;
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #1b2636;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+    .switch .knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #7d8da3;
+      transition: transform 140ms ease, background 140ms ease;
+    }
+    .switch[aria-checked="true"] { background: var(--accent-soft); border-color: rgba(45, 212, 191, 0.45); }
+    .switch[aria-checked="true"] .knob { transform: translateX(16px); background: var(--accent); box-shadow: 0 0 8px rgba(45, 212, 191, 0.45); }
+    .switch:disabled { opacity: 0.45; cursor: default; }
+
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--panel);
+      color: #cfdaea;
+      font-size: 12px;
+      transition: background 120ms ease;
+    }
+    .action:hover:not(:disabled) { background: var(--panel-2); }
+    .action:disabled { opacity: 0.5; cursor: default; }
+    .action svg { width: 13px; height: 13px; color: var(--muted); }
+
+    .footer { margin-top: 10px; }
+    .link-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 9px 0 1px;
+      border-top: 1px solid var(--border-soft);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .link-row:hover { color: var(--text); }
+    .chev { color: var(--muted); font-size: 14px; line-height: 1; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Privacy Shield</h1>
-    <span class="muted" id="version">v—</span>
-  </div>
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3 5 6v5.4c0 4.6 2.9 8 7 9.6 4.1-1.6 7-5 7-9.6V6l-7-3Z" />
+          <path d="m9 12 2 2 4-4.5" />
+        </svg>
+      </span>
+      <div>
+        <div class="title">Privacy Shield</div>
+        <div class="version" id="version">v—</div>
+      </div>
+    </div>
+  </header>
 
-  <h2>Current site</h2>
-  <div class="site" id="site">—</div>
-  <div class="site-state" id="siteState">Checking…</div>
+  <section class="site-card">
+    <div>
+      <div class="site" id="site">—</div>
+      <div class="site-state" id="siteState">Checking…</div>
+    </div>
+    <button class="pill" id="siteToggle" data-on="true" aria-pressed="true" title="Toggle protection for this site">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="siteToggleLabel">On</span>
+    </button>
+  </section>
 
-  <div class="stats">
-    <div>Blocked here: <span class="value" id="siteBlocked">0</span></div>
-    <div>Total blocked: <span class="value" id="totalBlocked">0</span></div>
-    <div>Active rules: <span class="value" id="rules">0</span></div>
-  </div>
+  <section class="stats">
+    <div class="stat">
+      <span class="stat-value" id="siteBlocked">0</span>
+      <span class="stat-label">Here</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value" id="totalBlocked">0</span>
+      <span class="stat-label">Total</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value" id="rules">0</span>
+      <span class="stat-label">Rules</span>
+    </div>
+  </section>
 
-  <h2>Site controls</h2>
-  <label><input type="checkbox" id="siteEnabled" /> Protection on this site</label>
-  <label><input type="checkbox" id="siteCookies" /> Block cookies</label>
-  <label><input type="checkbox" id="siteScripts" /> Block scripts</label>
-  <label><input type="checkbox" id="siteCosmetic" /> Hide ads</label>
+  <h2 class="section-title">Site controls</h2>
+  <section class="panel">
+    <div class="row">
+      <span class="row-label">Cookies</span>
+      <button class="switch" id="siteCookies" role="switch" aria-checked="true" aria-label="Block third-party cookies on this site">
+        <span class="knob"></span>
+      </button>
+    </div>
+    <div class="row">
+      <span class="row-label">Scripts</span>
+      <button class="switch" id="siteScripts" role="switch" aria-checked="false" aria-label="Block third-party scripts on this site">
+        <span class="knob"></span>
+      </button>
+    </div>
+    <div class="row">
+      <span class="row-label">Hide ads</span>
+      <button class="switch" id="siteCosmetic" role="switch" aria-checked="true" aria-label="Hide ads on this site">
+        <span class="knob"></span>
+      </button>
+    </div>
+  </section>
 
   <div class="actions">
-    <button id="picker">Pick element</button>
-    <button id="openLog">Request log</button>
+    <button class="action" id="picker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="12" r="7" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+      </svg>
+      Pick element
+    </button>
+    <button class="action" id="openLog">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M5 7h14M5 12h14M5 17h9" />
+      </svg>
+      Request log
+    </button>
   </div>
-  <a class="link" href="#" id="openOptions">Advanced settings</a>
 
-  <h2>Global</h2>
-  <label><input type="checkbox" id="toggle" /> Global protection</label>
+  <section class="panel footer">
+    <div class="row">
+      <span class="row-label">Global protection</span>
+      <button class="switch" id="toggle" role="switch" aria-checked="true" aria-label="Toggle global protection">
+        <span class="knob"></span>
+      </button>
+    </div>
+    <button class="link-row" id="openOptions">
+      <span>Advanced settings</span>
+      <span class="chev" aria-hidden="true">›</span>
+    </button>
+  </section>
 
   <script src="popup.js"></script>
 </body>

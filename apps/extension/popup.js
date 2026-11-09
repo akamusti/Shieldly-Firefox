@@ -1,13 +1,14 @@
 const versionEl = document.getElementById('version');
 const siteEl = document.getElementById('site');
 const siteState = document.getElementById('siteState');
-const siteEnabled = document.getElementById('siteEnabled');
+const siteToggle = document.getElementById('siteToggle');
+const siteToggleLabel = document.getElementById('siteToggleLabel');
 const siteBlocked = document.getElementById('siteBlocked');
 const totalBlocked = document.getElementById('totalBlocked');
 const rulesEl = document.getElementById('rules');
-const cookiesCheckbox = document.getElementById('siteCookies');
-const scriptsCheckbox = document.getElementById('siteScripts');
-const cosmeticCheckbox = document.getElementById('siteCosmetic');
+const cookiesSwitch = document.getElementById('siteCookies');
+const scriptsSwitch = document.getElementById('siteScripts');
+const cosmeticSwitch = document.getElementById('siteCosmetic');
 const globalToggle = document.getElementById('toggle');
 const picker = document.getElementById('picker');
 const openLog = document.getElementById('openLog');
@@ -27,10 +28,14 @@ function effective(site, key, fallback) {
   return site && typeof site[key] === 'boolean' ? site[key] : fallback;
 }
 
+function setSwitch(button, value) {
+  button.setAttribute('aria-checked', String(value === true));
+}
+
 async function load() {
   state = await browser.storage.local.get([
     'enabled', 'blocked', 'disabledSites', 'siteSettings', 'siteStats',
-    'activeRuleCount', 'cookieProtection', 'scriptControl',
+    'activeRuleCount', 'dnrRuleCount', 'cookieProtection', 'scriptControl',
   ]);
 
   const enabled = state.enabled !== false;
@@ -57,15 +62,18 @@ async function load() {
   totalBlocked.textContent = (state.blocked || 0).toLocaleString();
   rulesEl.textContent = (state.activeRuleCount || 0).toLocaleString();
 
-  siteEnabled.checked = protectionOn;
-  cookiesCheckbox.checked = effective(site, 'cookieProtection', cookieProtection);
-  scriptsCheckbox.checked = effective(site, 'scriptControl', scriptControl);
-  cosmeticCheckbox.checked = effective(site, 'cosmeticFiltering', true);
-  globalToggle.checked = enabled;
+  siteToggle.dataset.on = String(active);
+  siteToggle.setAttribute('aria-pressed', String(active));
+  siteToggleLabel.textContent = active ? 'On' : 'Off';
+  siteToggle.disabled = !host;
 
-  siteEnabled.disabled = !host;
-  for (const checkbox of [cookiesCheckbox, scriptsCheckbox, cosmeticCheckbox]) {
-    checkbox.disabled = !host;
+  setSwitch(cookiesSwitch, effective(site, 'cookieProtection', cookieProtection));
+  setSwitch(scriptsSwitch, effective(site, 'scriptControl', scriptControl));
+  setSwitch(cosmeticSwitch, effective(site, 'cosmeticFiltering', true));
+  setSwitch(globalToggle, enabled);
+
+  for (const button of [cookiesSwitch, scriptsSwitch, cosmeticSwitch]) {
+    button.disabled = !host;
   }
   picker.disabled = !host;
 }
@@ -76,48 +84,53 @@ async function saveSiteSettings(siteSettings) {
   await load();
 }
 
-siteEnabled.addEventListener('change', async () => {
+siteToggle.addEventListener('click', async () => {
   if (!host) return;
   const { disabledSites = [], siteSettings = {} } = await browser.storage.local.get(['disabledSites', 'siteSettings']);
-  const next = siteEnabled.checked
-    ? disabledSites.filter((h) => h !== host)
-    : [...disabledSites, host];
+  const next = protectionOn()
+    ? [...disabledSites, host]
+    : disabledSites.filter((h) => h !== host);
   if (siteSettings[host]) delete siteSettings[host].enabled;
   await browser.storage.local.set({ disabledSites: next, siteSettings });
   await load();
 });
 
-async function toggleModule(key, fallback, value) {
+function protectionOn() {
+  return siteToggle.dataset.on === 'true';
+}
+
+async function toggleModule(key, fallback) {
   if (!host) return;
   const { siteSettings = {} } = await browser.storage.local.get('siteSettings');
   const site = { ...(siteSettings[host] || {}) };
   const explicit = typeof site[key] === 'boolean';
+  const current = explicit ? site[key] : fallback;
+  const next = !current;
 
-  if (explicit && value === fallback) {
+  if (explicit && next === fallback) {
     delete site[key];
   } else {
-    site[key] = value;
+    site[key] = next;
   }
   siteSettings[host] = site;
   await saveSiteSettings(siteSettings);
 }
 
-cookiesCheckbox.addEventListener('change', async () => {
+cookiesSwitch.addEventListener('click', async () => {
   const { cookieProtection = true } = await browser.storage.local.get('cookieProtection');
-  toggleModule('cookieProtection', cookieProtection, cookiesCheckbox.checked);
+  toggleModule('cookieProtection', cookieProtection);
 });
 
-scriptsCheckbox.addEventListener('change', async () => {
+scriptsSwitch.addEventListener('click', async () => {
   const { scriptControl = false } = await browser.storage.local.get('scriptControl');
-  toggleModule('scriptControl', scriptControl, scriptsCheckbox.checked);
+  toggleModule('scriptControl', scriptControl);
 });
 
-cosmeticCheckbox.addEventListener('change', () => {
-  toggleModule('cosmeticFiltering', true, cosmeticCheckbox.checked);
-});
+cosmeticSwitch.addEventListener('click', () => toggleModule('cosmeticFiltering', true));
 
-globalToggle.addEventListener('change', async () => {
-  await browser.storage.local.set({ enabled: globalToggle.checked });
+globalToggle.addEventListener('click', async () => {
+  const { enabled = true } = await browser.storage.local.get('enabled');
+  await browser.storage.local.set({ enabled: !enabled });
   await load();
 });
 
@@ -135,10 +148,7 @@ function openOptionsPage(hash) {
 }
 
 openLog.addEventListener('click', () => openOptionsPage('#request-log'));
-openOptions.addEventListener('click', (event) => {
-  event.preventDefault();
-  openOptionsPage();
-});
+openOptions.addEventListener('click', () => openOptionsPage());
 
 browser.storage.onChanged.addListener(() => load());
 
