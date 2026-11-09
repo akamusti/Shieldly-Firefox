@@ -18,6 +18,12 @@ function isBlockedHost(host) {
   return false;
 }
 
+function sameSite(a, b) {
+  const ra = a.split('.').slice(-2).join('.');
+  const rb = b.split('.').slice(-2).join('.');
+  return ra === rb;
+}
+
 async function refreshState(keys) {
   const st = await browser.storage.local.get(['enabled', 'disabledSites', 'cosmeticSelectors']);
   if (!keys || keys.includes('enabled')) enabled = st.enabled !== false;
@@ -42,8 +48,9 @@ async function fetchLists() {
         if (line.includes('$')) continue;
         const dm = line.match(/^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\^/);
         if (dm) domains.add(dm[1]);
-        const cm = line.match(/##(.+)$/);
-        if (cm && cm[1]) selectors.add(cm[1]);
+        // Only keep site-specific cosmetic rules; generic rules can hide whole pages.
+        const cm = line.match(/^([a-zA-Z0-9.*-]+)##(.+)$/);
+        if (cm && cm[1] && cm[1] !== '*' && cm[2]) selectors.add(`${cm[1]}##${cm[2]}`);
       }
     } catch (e) {
       console.warn('List fetch failed', url, e);
@@ -77,6 +84,12 @@ browser.webRequest.onBeforeRequest.addListener(
     let host;
     try { host = new URL(details.url).hostname; } catch { return {}; }
     if (disabledSites.includes(host)) return {};
+    // Only block third-party requests so first-party site resources always load.
+    const initiator = details.originUrl || details.documentUrl;
+    if (!initiator) return {};
+    let initiatorHost;
+    try { initiatorHost = new URL(initiator).hostname; } catch { return {}; }
+    if (sameSite(initiatorHost, host)) return {};
     if (isBlockedHost(host)) {
       browser.storage.local.get('blocked').then(({ blocked = 0 }) => {
         browser.storage.local.set({ blocked: blocked + 1 });

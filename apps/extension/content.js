@@ -2,6 +2,10 @@
   const STYLE_ID = 'privacy-shield-cosmetic';
   let lastCss = '';
 
+  function matchesHost(entryHost, host) {
+    return host === entryHost || host.endsWith('.' + entryHost);
+  }
+
   async function apply() {
     const { enabled = true, disabledSites = [], cosmeticSelectors = [] } = await browser.storage.local.get(['enabled', 'disabledSites', 'cosmeticSelectors']);
     const host = location.hostname;
@@ -14,7 +18,15 @@
       lastCss = '';
       return;
     }
-    const css = cosmeticSelectors.map((s) => `${s} { display: none !important; }`).join('\n');
+    const selectors = [];
+    for (const entry of cosmeticSelectors) {
+      const idx = entry.indexOf('##');
+      if (idx < 0) continue;
+      const entryHost = entry.slice(0, idx);
+      const selector = entry.slice(idx + 2);
+      if (matchesHost(entryHost, host)) selectors.push(selector);
+    }
+    const css = selectors.map((s) => `${s} { display: none !important; }`).join('\n');
     if (css === lastCss) return;
     lastCss = css;
     if (!style) {
