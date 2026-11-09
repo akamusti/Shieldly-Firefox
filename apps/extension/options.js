@@ -33,7 +33,7 @@ function chip(label, value) {
 async function getState() {
   return browser.storage.local.get([
     'filterLists', 'customFilterLists', 'filterListStatus', 'customRulesText',
-    'cookieProtection', 'scriptControl', 'siteSettings', 'disabledSites', 'requestLog',
+    'cookieProtection', 'scriptControl', 'siteSettings', 'disabledSites', 'siteStats', 'requestLog',
   ]);
 }
 
@@ -185,9 +185,11 @@ function renderSites(state) {
     hostEl.className = 'host';
     hostEl.textContent = host;
 
+    const blockedCount = (state.siteStats && state.siteStats[host]) || 0;
     row.append(
       hostEl,
       chip(enabled ? 'Protection' : 'Paused', enabled),
+      chip(`Blocked ${blockedCount.toLocaleString()}`, blockedCount > 0),
       chip('Cookies', typeof site.cookieProtection === 'boolean' ? site.cookieProtection : state.cookieProtection !== false),
       chip('Scripts', typeof site.scriptControl === 'boolean' ? site.scriptControl : state.scriptControl === true),
       chip('Cosmetic', typeof site.cosmeticFiltering === 'boolean' ? site.cosmeticFiltering : true),

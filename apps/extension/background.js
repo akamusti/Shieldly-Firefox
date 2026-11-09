@@ -130,8 +130,51 @@ async function fetchLists() {
   await browser.storage.local.set({
     cosmeticSelectors,
     filterListStatus: status,
+    activeRuleCount: domains.size,
   });
   await refreshState();
+}
+
+// Batch counters so a burst of blocked requests does not race on storage writes.
+let pendingBlocked = 0;
+let pendingSites = {};
+let pendingLog = [];
+let flushTimer = null;
+
+function scheduleFlush() {
+  if (!flushTimer) flushTimer = setTimeout(flushStats, 400);
+}
+
+function recordBlocked(url, initiatorHost) {
+  pendingBlocked += 1;
+  if (initiatorHost) pendingSites[initiatorHost] = (pendingSites[initiatorHost] || 0) + 1;
+  pendingLog.push({ url, time: Date.now(), site: initiatorHost || null });
+  if (pendingLog.length > 200) pendingLog = pendingLog.slice(-200);
+  scheduleFlush();
+}
+
+async function flushStats() {
+  flushTimer = null;
+  const blockedInc = pendingBlocked;
+  const siteInc = pendingSites;
+  const logs = pendingLog;
+  pendingBlocked = 0;
+  pendingSites = {};
+  pendingLog = [];
+  if (!blockedInc && !logs.length) return;
+
+  const { blocked = 0, siteStats = {}, requestLog = [] } =
+    await browser.storage.local.get(['blocked', 'siteStats', 'requestLog']);
+  const nextSites = { ...siteStats };
+  for (const [host, count] of Object.entries(siteInc)) {
+    nextSites[host] = (nextSites[host] || 0) + count;
+  }
+  const nextLog = [...logs.reverse(), ...requestLog].slice(0, 200);
+  await browser.storage.local.set({
+    blocked: blocked + blockedInc,
+    siteStats: nextSites,
+    requestLog: nextLog,
+  });
 }
 
 browser.runtime.onStartup.addListener(async () => { await fetchLists(); });
@@ -175,13 +218,11 @@ browser.webRequest.onBeforeRequest.addListener(
     if (!initiatorHost) return {};
     if (sameSite(initiatorHost, host)) return {};
     if (settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script') {
+      recordBlocked(details.url, initiatorHost);
       return { cancel: true };
     }
     if (isBlockedHost(host)) {
-      browser.storage.local.get(['blocked', 'requestLog']).then(({ blocked = 0, requestLog = [] }) => {
-        requestLog.unshift({ url: details.url, time: Date.now() });
-        browser.storage.local.set({ blocked: blocked + 1, requestLog: requestLog.slice(0, 200) });
-      });
+      recordBlocked(details.url, initiatorHost);
       return { cancel: true };
     }
     return {};

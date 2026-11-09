@@ -1,74 +1,109 @@
-const toggle = document.getElementById('toggle');
-const siteToggle = document.getElementById('siteToggle');
-const siteCookies = document.getElementById('siteCookies');
-const siteScripts = document.getElementById('siteScripts');
-const siteCosmetic = document.getElementById('siteCosmetic');
-const countEl = document.getElementById('count');
+const versionEl = document.getElementById('version');
 const siteEl = document.getElementById('site');
+const siteState = document.getElementById('siteState');
+const siteToggle = document.getElementById('siteToggle');
+const siteBlocked = document.getElementById('siteBlocked');
+const totalBlocked = document.getElementById('totalBlocked');
+const rulesEl = document.getElementById('rules');
+const cookiesSwitch = document.getElementById('siteCookies');
+const scriptsSwitch = document.getElementById('siteScripts');
+const cosmeticSwitch = document.getElementById('siteCosmetic');
+const cookiesHint = document.getElementById('cookiesHint');
+const scriptsHint = document.getElementById('scriptsHint');
+const cosmeticHint = document.getElementById('cosmeticHint');
+const overrideNote = document.getElementById('overrideNote');
+const globalToggle = document.getElementById('toggle');
 const picker = document.getElementById('picker');
+const openLog = document.getElementById('openLog');
+const openOptions = document.getElementById('openOptions');
 
 let host = '';
+let state = {};
+
+versionEl.textContent = `v${browser.runtime.getManifest().version}`;
 
 async function currentHost() {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   try { return new URL(tab.url).hostname; } catch { return ''; }
 }
 
-function moduleLabel(site, key, globalValue) {
-  if (site && typeof site[key] === 'boolean') return site[key] ? 'On' : 'Off';
-  return `Default (${globalValue ? 'On' : 'Off'})`;
+function setSwitch(button, value) {
+  button.setAttribute('aria-checked', String(value === true));
 }
 
-function applyStateClass(button, value) {
-  button.classList.toggle('on', value === true);
-  button.classList.toggle('off', value === false);
+function effective(site, key, fallback) {
+  return site && typeof site[key] === 'boolean' ? site[key] : fallback;
+}
+
+function setHint(element, site, key, fallback) {
+  if (site && typeof site[key] === 'boolean') {
+    element.textContent = `Site override · ${site[key] ? 'on' : 'off'}`;
+    element.style.color = 'var(--accent)';
+  } else {
+    element.textContent = `Default · ${fallback ? 'on' : 'off'}`;
+    element.style.color = '';
+  }
 }
 
 async function load() {
-  const {
-    enabled = true,
-    blocked = 0,
-    disabledSites = [],
-    siteSettings = {},
-    cookieProtection = true,
-    scriptControl = false,
-  } = await browser.storage.local.get([
-    'enabled', 'blocked', 'disabledSites', 'siteSettings', 'cookieProtection', 'scriptControl',
+  state = await browser.storage.local.get([
+    'enabled', 'blocked', 'disabledSites', 'siteSettings', 'siteStats',
+    'activeRuleCount', 'cookieProtection', 'scriptControl',
   ]);
 
-  toggle.textContent = enabled ? 'On' : 'Off';
-  countEl.textContent = String(blocked);
-
-  host = host || (await currentHost());
+  const enabled = state.enabled !== false;
+  const disabledSites = state.disabledSites || [];
+  const siteSettings = state.siteSettings || {};
   const site = siteSettings[host] || null;
-  const siteEnabled = !disabledSites.includes(host) && (!site || site.enabled !== false);
+  const cookieProtection = state.cookieProtection !== false;
+  const scriptControl = state.scriptControl === true;
 
-  siteEl.textContent = host;
-  siteToggle.textContent = siteEnabled ? 'Enabled' : 'Disabled';
-  siteToggle.classList.toggle('off', !siteEnabled);
-  siteToggle.classList.toggle('on', siteEnabled);
+  const siteEnabled = !!host && !disabledSites.includes(host) && (!site || site.enabled !== false);
+  const active = enabled && siteEnabled;
 
-  siteCookies.textContent = moduleLabel(site, 'cookieProtection', cookieProtection);
-  siteScripts.textContent = moduleLabel(site, 'scriptControl', scriptControl);
-  siteCosmetic.textContent = moduleLabel(site, 'cosmeticFiltering', true);
-  applyStateClass(siteCookies, site && typeof site.cookieProtection === 'boolean' ? site.cookieProtection : cookieProtection);
-  applyStateClass(siteScripts, site && typeof site.scriptControl === 'boolean' ? site.scriptControl : scriptControl);
-  applyStateClass(siteCosmetic, site && typeof site.cosmeticFiltering === 'boolean' ? site.cosmeticFiltering : true);
+  siteEl.textContent = host || 'Internal page';
+  siteState.textContent = !host
+    ? 'No site controls available'
+    : !enabled
+      ? 'Global protection is off'
+      : siteEnabled
+        ? 'Protection active on this site'
+        : 'Paused on this site';
+  siteState.className = `site-state ${active ? 'on' : 'off'}`;
+
+  siteToggle.dataset.on = String(active);
+  siteToggle.setAttribute('aria-pressed', String(active));
+  siteToggle.disabled = !host || !enabled;
+
+  siteBlocked.textContent = (host && state.siteStats && state.siteStats[host] ? state.siteStats[host] : 0).toLocaleString();
+  totalBlocked.textContent = (state.blocked || 0).toLocaleString();
+  rulesEl.textContent = (state.activeRuleCount || 0).toLocaleString();
+
+  const cookieValue = effective(site, 'cookieProtection', cookieProtection);
+  const scriptValue = effective(site, 'scriptControl', scriptControl);
+  const cosmeticValue = effective(site, 'cosmeticFiltering', true);
+
+  setSwitch(cookiesSwitch, cookieValue);
+  setSwitch(scriptsSwitch, scriptValue);
+  setSwitch(cosmeticSwitch, cosmeticValue);
+  setSwitch(globalToggle, enabled);
+  setHint(cookiesHint, site, 'cookieProtection', cookieProtection);
+  setHint(scriptsHint, site, 'scriptControl', scriptControl);
+  setHint(cosmeticHint, site, 'cosmeticFiltering', true);
+
+  const overrideCount = site ? Object.keys(site).filter((k) => k !== 'enabled').length : 0;
+  overrideNote.textContent = overrideCount ? `${overrideCount} override${overrideCount > 1 ? 's' : ''}` : 'Using defaults';
+
+  for (const button of [cookiesSwitch, scriptsSwitch, cosmeticSwitch]) {
+    button.disabled = !host;
+  }
 }
 
-async function patchSite(patch) {
-  if (!host) return;
-  const { siteSettings = {} } = await browser.storage.local.get('siteSettings');
-  siteSettings[host] = { ...(siteSettings[host] || {}), ...patch };
+async function saveSiteSettings(siteSettings) {
+  if (host && !siteSettings[host]) delete siteSettings[host];
   await browser.storage.local.set({ siteSettings });
+  await load();
 }
-
-toggle.addEventListener('click', async () => {
-  const { enabled = true } = await browser.storage.local.get('enabled');
-  await browser.storage.local.set({ enabled: !enabled });
-  load();
-});
 
 siteToggle.addEventListener('click', async () => {
   if (!host) return;
@@ -78,40 +113,63 @@ siteToggle.addEventListener('click', async () => {
     : [...disabledSites, host];
   if (siteSettings[host]) delete siteSettings[host].enabled;
   await browser.storage.local.set({ disabledSites: next, siteSettings });
-  load();
+  await load();
 });
 
-async function toggleModule(key, globalValue) {
+async function toggleModule(key, fallback) {
   if (!host) return;
   const { siteSettings = {} } = await browser.storage.local.get('siteSettings');
-  const site = siteSettings[host] || {};
-  const current = typeof site[key] === 'boolean' ? site[key] : globalValue;
-  site[key] = !current;
+  const site = { ...(siteSettings[host] || {}) };
+  const explicit = typeof site[key] === 'boolean';
+  const current = explicit ? site[key] : fallback;
+  const next = !current;
+
+  if (explicit && next === fallback) {
+    delete site[key];
+  } else {
+    site[key] = next;
+  }
   siteSettings[host] = site;
-  await browser.storage.local.set({ siteSettings });
-  load();
+  await saveSiteSettings(siteSettings);
 }
 
-siteCookies.addEventListener('click', async () => {
+cookiesSwitch.addEventListener('click', async () => {
   const { cookieProtection = true } = await browser.storage.local.get('cookieProtection');
   toggleModule('cookieProtection', cookieProtection);
 });
 
-siteScripts.addEventListener('click', async () => {
+scriptsSwitch.addEventListener('click', async () => {
   const { scriptControl = false } = await browser.storage.local.get('scriptControl');
   toggleModule('scriptControl', scriptControl);
 });
 
-siteCosmetic.addEventListener('click', () => toggleModule('cosmeticFiltering', true));
+cosmeticSwitch.addEventListener('click', () => toggleModule('cosmeticFiltering', true));
+
+globalToggle.addEventListener('click', async () => {
+  const { enabled = true } = await browser.storage.local.get('enabled');
+  await browser.storage.local.set({ enabled: !enabled });
+  await load();
+});
 
 picker.addEventListener('click', async () => {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab && tab.id) {
     browser.tabs.sendMessage(tab.id, { type: 'startPicker' });
     window.close();
   }
 });
 
-load();
+function openOptionsPage(hash) {
+  browser.tabs.create({ url: browser.runtime.getURL(`options.html${hash || ''}`) });
+  window.close();
+}
+
+openLog.addEventListener('click', () => openOptionsPage('#request-log'));
+openOptions.addEventListener('click', () => openOptionsPage());
+
 browser.storage.onChanged.addListener(() => load());
+
+(async () => {
+  host = await currentHost();
+  await load();
+})();
