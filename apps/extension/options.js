@@ -5,17 +5,21 @@ const save = document.getElementById('save');
 const saved = document.getElementById('saved');
 
 async function load() {
-  const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '' } =
-    await browser.storage.local.get(['filterLists', 'customRulesText']);
+  const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '', cookieProtection = true, scriptControl = false } =
+    await browser.storage.local.get(['filterLists', 'customRulesText', 'cookieProtection', 'scriptControl']);
   easylist.checked = filterLists.easylist !== false;
   easyprivacy.checked = filterLists.easyprivacy !== false;
   customRules.value = customRulesText;
+  document.getElementById('cookieProtection').checked = cookieProtection !== false;
+  document.getElementById('scriptControl').checked = scriptControl === true;
 }
 
 save.addEventListener('click', async () => {
   await browser.storage.local.set({
     filterLists: { easylist: easylist.checked, easyprivacy: easyprivacy.checked },
     customRulesText: customRules.value,
+    cookieProtection: document.getElementById('cookieProtection').checked,
+    scriptControl: document.getElementById('scriptControl').checked,
   });
   saved.textContent = 'Saved. Reload the extension to rebuild rules.';
   setTimeout(() => { saved.textContent = ''; }, 3000);

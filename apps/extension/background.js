@@ -7,6 +7,8 @@ let blockedDomains = new Set();
 let cosmeticSelectors = [];
 let disabledSites = [];
 let enabled = true;
+let cookieProtection = true;
+let scriptControl = false;
 
 function isBlockedHost(host) {
   // Walk hostname suffixes for O(depth) lookup.
@@ -25,10 +27,12 @@ function sameSite(a, b) {
 }
 
 async function refreshState(keys) {
-  const st = await browser.storage.local.get(['enabled', 'disabledSites', 'cosmeticSelectors']);
+  const st = await browser.storage.local.get(['enabled', 'disabledSites', 'cosmeticSelectors', 'cookieProtection', 'scriptControl']);
   if (!keys || keys.includes('enabled')) enabled = st.enabled !== false;
   if (!keys || keys.includes('disabledSites')) disabledSites = st.disabledSites || [];
   if (!keys || keys.includes('cosmeticSelectors')) cosmeticSelectors = st.cosmeticSelectors || [];
+  if (!keys || keys.includes('cookieProtection')) cookieProtection = st.cookieProtection !== false;
+  if (!keys || keys.includes('scriptControl')) scriptControl = st.scriptControl === true;
 }
 
 async function fetchLists() {
@@ -103,6 +107,9 @@ browser.webRequest.onBeforeRequest.addListener(
     let initiatorHost;
     try { initiatorHost = new URL(initiator).hostname; } catch { return {}; }
     if (sameSite(initiatorHost, host)) return {};
+    if (scriptControl && details.type === 'script') {
+      return { cancel: true };
+    }
     if (isBlockedHost(host)) {
       browser.storage.local.get(['blocked', 'requestLog']).then(({ blocked = 0, requestLog = [] }) => {
         requestLog.unshift({ url: details.url, time: Date.now() });
@@ -114,4 +121,36 @@ browser.webRequest.onBeforeRequest.addListener(
   },
   { urls: ['<all_urls>'] },
   ['blocking']
+);
+
+function isThirdParty(details) {
+  try {
+    const host = new URL(details.url).hostname;
+    const initiator = details.originUrl || details.documentUrl;
+    if (!initiator) return false;
+    const initiatorHost = new URL(initiator).hostname;
+    return !sameSite(initiatorHost, host);
+  } catch {
+    return false;
+  }
+}
+
+browser.webRequest.onBeforeSendHeaders.addListener(
+  (details) => {
+    if (!enabled || !cookieProtection || !isThirdParty(details)) return {};
+    const headers = details.requestHeaders.filter((h) => h.name.toLowerCase() !== 'cookie');
+    return { requestHeaders: headers };
+  },
+  { urls: ['<all_urls>'] },
+  ['blocking', 'requestHeaders']
+);
+
+browser.webRequest.onHeadersReceived.addListener(
+  (details) => {
+    if (!enabled || !cookieProtection || !isThirdParty(details)) return {};
+    const headers = (details.responseHeaders || []).filter((h) => h.name.toLowerCase() !== 'set-cookie');
+    return { responseHeaders: headers };
+  },
+  { urls: ['<all_urls>'] },
+  ['blocking', 'responseHeaders']
 );
