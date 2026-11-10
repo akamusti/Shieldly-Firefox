@@ -1,6 +1,17 @@
 const BUILTIN_LISTS = [
   { id: 'easylist', name: 'EasyList (ads)' },
   { id: 'easyprivacy', name: 'EasyPrivacy (trackers)' },
+  { id: 'russian', name: 'AdGuard Russian filter' },
+  { id: 'german', name: 'AdGuard German filter' },
+  { id: 'japanese', name: 'AdGuard Japanese filter' },
+  { id: 'dutch', name: 'AdGuard Dutch filter' },
+  { id: 'spanish', name: 'AdGuard Spanish/Portuguese filter' },
+  { id: 'turkish', name: 'AdGuard Turkish filter' },
+  { id: 'french', name: 'AdGuard French filter' },
+  { id: 'ukrainian', name: 'AdGuard Ukrainian filter' },
+  { id: 'italian', name: 'AdGuard Italian filter' },
+  { id: 'polish', name: 'AdGuard Polish filter' },
+  { id: 'chinese', name: 'AdGuard Chinese filter' },
 ];
 
 const cookieProtection = document.getElementById('cookieProtection');

@@ -1,6 +1,17 @@
 const BUILTIN_LISTS = [
   { id: 'easylist', name: 'EasyList', url: 'https://easylist.to/easylist/easylist.txt' },
   { id: 'easyprivacy', name: 'EasyPrivacy', url: 'https://easylist.to/easylist/easyprivacy.txt' },
+  { id: 'russian', name: 'AdGuard Russian filter', url: 'https://filters.adtidy.org/extension/chromium/filters/1.txt' },
+  { id: 'german', name: 'AdGuard German filter', url: 'https://filters.adtidy.org/extension/chromium/filters/6.txt' },
+  { id: 'japanese', name: 'AdGuard Japanese filter', url: 'https://filters.adtidy.org/extension/chromium/filters/7.txt' },
+  { id: 'dutch', name: 'AdGuard Dutch filter', url: 'https://filters.adtidy.org/extension/chromium/filters/8.txt' },
+  { id: 'spanish', name: 'AdGuard Spanish/Portuguese filter', url: 'https://filters.adtidy.org/extension/chromium/filters/9.txt' },
+  { id: 'turkish', name: 'AdGuard Turkish filter', url: 'https://filters.adtidy.org/extension/chromium/filters/13.txt' },
+  { id: 'french', name: 'AdGuard French filter', url: 'https://filters.adtidy.org/extension/chromium/filters/16.txt' },
+  { id: 'ukrainian', name: 'AdGuard Ukrainian filter', url: 'https://filters.adtidy.org/extension/chromium/filters/23.txt' },
+  { id: 'italian', name: 'AdGuard Italian filter', url: 'https://filters.adtidy.org/extension/chromium/filters/26.txt' },
+  { id: 'polish', name: 'AdGuard Polish filter', url: 'https://filters.adtidy.org/extension/chromium/filters/27.txt' },
+  { id: 'chinese', name: 'AdGuard Chinese filter', url: 'https://filters.adtidy.org/extension/chromium/filters/224.txt' },
 ];
 
 let blockedDomains = new Set();
