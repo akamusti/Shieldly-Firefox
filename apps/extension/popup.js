@@ -15,13 +15,28 @@ const openLog = document.getElementById('openLog');
 const openOptions = document.getElementById('openOptions');
 
 let host = '';
+let tabId = -1;
 let state = {};
 
 versionEl.textContent = `v${browser.runtime.getManifest().version}`;
 
-async function currentHost() {
+async function currentTab() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  try { return new URL(tab.url).hostname; } catch { return ''; }
+  if (!tab) return { host: '', tabId: -1 };
+  let siteHost = '';
+  try { siteHost = new URL(tab.url).hostname; } catch { siteHost = ''; }
+  return { host: siteHost, tabId: typeof tab.id === 'number' ? tab.id : -1 };
+}
+
+async function pageBlockedCount() {
+  if (tabId < 0) return (state.siteStats && state.siteStats[host]) || 0;
+  try {
+    const res = await browser.runtime.sendMessage({ type: 'getTabStats', tabId });
+    if (res && typeof res.count === 'number') return res.count;
+  } catch {
+    // Background unavailable; fall back to the stored per-site counter.
+  }
+  return (state.siteStats && state.siteStats[host]) || 0;
 }
 
 function effective(site, key, fallback) {
@@ -58,7 +73,7 @@ async function load() {
         : 'Paused on this site';
   siteState.classList.toggle('active', active);
 
-  siteBlocked.textContent = (host && state.siteStats && state.siteStats[host] ? state.siteStats[host] : 0).toLocaleString();
+  siteBlocked.textContent = (await pageBlockedCount()).toLocaleString();
   totalBlocked.textContent = (state.blocked || 0).toLocaleString();
   rulesEl.textContent = (state.activeRuleCount || 0).toLocaleString();
 
@@ -153,6 +168,8 @@ openOptions.addEventListener('click', () => openOptionsPage());
 browser.storage.onChanged.addListener(() => load());
 
 (async () => {
-  host = await currentHost();
+  const tab = await currentTab();
+  host = tab.host;
+  tabId = tab.tabId;
   await load();
 })();

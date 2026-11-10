@@ -11,6 +11,93 @@ let enabled = true;
 let cookieProtection = true;
 let scriptControl = false;
 
+// Action badge shown on the toolbar icon, so users see the per-tab blocked
+// count without opening the popup (like uBlock Origin / Brave Shields).
+const BADGE_BG = '#2dd4bf';
+const BADGE_FG = '#062a27';
+const action = browser.action || browser.browserAction;
+
+let tabBlocked = new Map();
+let pendingBadges = new Set();
+let badgeTimer = null;
+
+// Compact form of formatBadgeCount() from @privacy-shield/statistics.
+// Extensions ship as plain JS, so the formatter is mirrored here.
+function compactCount(count) {
+  const n = Math.max(0, Math.floor(Number.isFinite(count) ? count : 0));
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  if (k < 9.95) return `${(Math.round(k * 10) / 10).toString().replace(/\.0$/, '')}K`;
+  if (k < 999.5) return `${Math.round(k)}K`;
+  const m = n / 1000000;
+  return `${(Math.round(m * 10) / 10).toString().replace(/\.0$/, '')}M`;
+}
+
+function setBadge(tabId, text, title) {
+  if (!action) return;
+  try {
+    action.setBadgeText({ tabId, text });
+    if (title) action.setTitle({ tabId, title });
+    if (text) {
+      action.setBadgeBackgroundColor({ tabId, color: BADGE_BG });
+      if (action.setBadgeTextColor) action.setBadgeTextColor({ tabId, color: BADGE_FG });
+    }
+  } catch {
+    // The tab may have closed between the event and the render.
+  }
+}
+
+async function updateBadge(tabId) {
+  if (typeof tabId !== 'number' || tabId < 0) return;
+  let tab;
+  try {
+    tab = await browser.tabs.get(tabId);
+  } catch {
+    tabBlocked.delete(tabId);
+    return;
+  }
+  const host = hostOf(tab && tab.url ? tab.url : '');
+  const count = tabBlocked.get(tabId) || 0;
+  if (!enabled || (host && isSiteDisabled(host))) {
+    setBadge(tabId, '', 'Privacy Shield — protection paused on this site');
+    return;
+  }
+  setBadge(
+    tabId,
+    count > 0 ? compactCount(count) : '',
+    count > 0 ? `Privacy Shield — ${count.toLocaleString()} blocked on this page` : 'Privacy Shield',
+  );
+}
+
+function scheduleBadge(tabId) {
+  pendingBadges.add(tabId);
+  if (!badgeTimer) badgeTimer = setTimeout(flushBadges, 120);
+}
+
+function flushBadges() {
+  badgeTimer = null;
+  const ids = Array.from(pendingBadges);
+  pendingBadges.clear();
+  for (const id of ids) updateBadge(id);
+}
+
+async function updateAllBadges() {
+  try {
+    const tabs = await browser.tabs.query({});
+    for (const tab of tabs) {
+      if (tab && typeof tab.id === 'number') await updateBadge(tab.id);
+    }
+  } catch {
+    // Tabs API unavailable; badges refresh on the next tab event.
+  }
+}
+
+function resetTab(tabId) {
+  tabBlocked.delete(tabId);
+  pendingBadges.delete(tabId);
+  setBadge(tabId, '', 'Privacy Shield');
+}
+
 function isBuiltinList(id) {
   return BUILTIN_LISTS.some((list) => list.id === id);
 }
@@ -145,11 +232,15 @@ function scheduleFlush() {
   if (!flushTimer) flushTimer = setTimeout(flushStats, 400);
 }
 
-function recordBlocked(url, initiatorHost) {
+function recordBlocked(url, initiatorHost, tabId) {
   pendingBlocked += 1;
   if (initiatorHost) pendingSites[initiatorHost] = (pendingSites[initiatorHost] || 0) + 1;
   pendingLog.push({ url, time: Date.now(), site: initiatorHost || null });
   if (pendingLog.length > 200) pendingLog = pendingLog.slice(-200);
+  if (typeof tabId === 'number' && tabId >= 0) {
+    tabBlocked.set(tabId, (tabBlocked.get(tabId) || 0) + 1);
+    scheduleBadge(tabId);
+  }
   scheduleFlush();
 }
 
@@ -177,7 +268,7 @@ async function flushStats() {
   });
 }
 
-browser.runtime.onStartup.addListener(async () => { await fetchLists(); });
+browser.runtime.onStartup.addListener(async () => { await fetchLists(); await updateAllBadges(); });
 
 browser.runtime.onInstalled.addListener(async () => {
   const st = await browser.storage.local.get('enabled');
@@ -185,25 +276,49 @@ browser.runtime.onInstalled.addListener(async () => {
     await browser.storage.local.set({ enabled: true, blocked: 0, disabledSites: [], siteSettings: {}, customFilterLists: [] });
   }
   await fetchLists();
+  await updateAllBadges();
   console.log('Privacy Shield (Firefox) installed.');
 });
 
 browser.storage.onChanged.addListener((changes) => {
   if (changes.filterLists || changes.customFilterLists || changes.customRulesText) {
-    fetchLists();
+    fetchLists().then(updateAllBadges);
     return;
   }
   const relevant = Object.keys(changes).filter((k) =>
     ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl'].includes(k)
   );
-  if (relevant.length) refreshState(relevant);
+  if (relevant.length) {
+    refreshState(relevant).then(updateAllBadges);
+  }
 });
 
-browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === 'getTabStats') {
+    const tabId = typeof msg.tabId === 'number' ? msg.tabId : sender && sender.tab ? sender.tab.id : -1;
+    sendResponse({ count: tabBlocked.get(tabId) || 0 });
+    return true;
+  }
   if (msg && msg.type === 'refreshLists') {
     fetchLists().then(() => sendResponse({ ok: true }));
     return true;
   }
+});
+
+browser.tabs.onActivated.addListener(({ tabId }) => scheduleBadge(tabId));
+
+browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  // A new document starts with a clean per-page counter.
+  if (changeInfo.status === 'loading' || changeInfo.url) {
+    resetTab(tabId);
+    return;
+  }
+  if (changeInfo.status === 'complete') scheduleBadge(tabId);
+});
+
+browser.tabs.onRemoved.addListener((tabId) => {
+  tabBlocked.delete(tabId);
+  pendingBadges.delete(tabId);
 });
 
 browser.webRequest.onBeforeRequest.addListener(
@@ -218,11 +333,11 @@ browser.webRequest.onBeforeRequest.addListener(
     if (!initiatorHost) return {};
     if (sameSite(initiatorHost, host)) return {};
     if (settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script') {
-      recordBlocked(details.url, initiatorHost);
+      recordBlocked(details.url, initiatorHost, details.tabId);
       return { cancel: true };
     }
     if (isBlockedHost(host)) {
-      recordBlocked(details.url, initiatorHost);
+      recordBlocked(details.url, initiatorHost, details.tabId);
       return { cancel: true };
     }
     return {};
