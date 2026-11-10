@@ -1,6 +1,7 @@
 const BUILTIN_LISTS = [
   { id: 'easylist', name: 'EasyList (ads)' },
   { id: 'easyprivacy', name: 'EasyPrivacy (trackers)' },
+  { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection' },
   { id: 'russian', name: 'AdGuard Russian filter' },
   { id: 'german', name: 'AdGuard German filter' },
   { id: 'japanese', name: 'AdGuard Japanese filter' },
@@ -64,8 +65,8 @@ function renderLists(state) {
   const status = state.filterListStatus || {};
   listsEl.innerHTML = '';
 
-  const baseLists = BUILTIN_LISTS.filter((l) => l.id === 'easylist' || l.id === 'easyprivacy');
-  const languageLists = BUILTIN_LISTS.filter((l) => l.id !== 'easylist' && l.id !== 'easyprivacy');
+  const baseLists = BUILTIN_LISTS.filter((l) => l.id === 'easylist' || l.id === 'easyprivacy' || l.id === 'privacy-removeparam');
+  const languageLists = BUILTIN_LISTS.filter((l) => l.id !== 'easylist' && l.id !== 'easyprivacy' && l.id !== 'privacy-removeparam');
 
   function appendRow(container, list, builtin) {
     const enabled = builtin ? filterLists[list.id] !== false : list.enabled !== false;
