@@ -64,13 +64,11 @@ function renderLists(state) {
   const status = state.filterListStatus || {};
   listsEl.innerHTML = '';
 
-  const rows = [
-    ...BUILTIN_LISTS.map((l) => ({ ...l, builtin: true })),
-    ...customFilterLists.map((l) => ({ ...l, builtin: false })),
-  ];
+  const baseLists = BUILTIN_LISTS.filter((l) => l.id === 'easylist' || l.id === 'easyprivacy');
+  const languageLists = BUILTIN_LISTS.filter((l) => l.id !== 'easylist' && l.id !== 'easyprivacy');
 
-  for (const list of rows) {
-    const enabled = list.builtin ? filterLists[list.id] !== false : list.enabled !== false;
+  function appendRow(container, list, builtin) {
+    const enabled = builtin ? filterLists[list.id] !== false : list.enabled !== false;
     const row = document.createElement('div');
     row.className = 'list-row';
 
@@ -98,7 +96,7 @@ function renderLists(state) {
       statusEl.textContent = `Updated ${formatTime(info.updatedAt)} · ${info.ruleCount} rules`;
     }
     meta.append(name, statusEl);
-    if (!list.builtin) {
+    if (!builtin) {
       const urlEl = document.createElement('div');
       urlEl.className = 'status';
       urlEl.textContent = list.url;
@@ -106,14 +104,29 @@ function renderLists(state) {
     }
     row.append(checkbox, meta);
 
-    if (!list.builtin) {
+    if (!builtin) {
       const remove = document.createElement('button');
       remove.textContent = 'Remove';
       remove.addEventListener('click', () => removeList(list.id));
       row.appendChild(remove);
     }
-    listsEl.appendChild(row);
+    container.appendChild(row);
   }
+
+  for (const list of baseLists) appendRow(listsEl, { ...list, builtin: true }, true);
+
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = 'Language filters (click to expand)';
+  summary.style.cursor = 'pointer';
+  summary.style.margin = '10px 0 6px';
+  details.appendChild(summary);
+  const langContainer = document.createElement('div');
+  for (const list of languageLists) appendRow(langContainer, { ...list, builtin: true }, true);
+  details.appendChild(langContainer);
+  listsEl.appendChild(details);
+
+  for (const list of customFilterLists) appendRow(listsEl, { ...list, builtin: false }, false);
 }
 
 async function toggleList(list, enabled) {
