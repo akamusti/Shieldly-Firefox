@@ -366,9 +366,19 @@ function isThirdParty(details) {
   return !sameSite(initiatorHost, host);
 }
 
+// Top-level navigations must keep their cookies. Firefox reports the referring
+// page as `originUrl` for main_frame requests, so a normal click from another
+// site looks third-party; stripping Cookie there logged users out of the
+// destination site (until a reload) and stripping Set-Cookie dropped the
+// session cookie from login responses. Mirrors COOKIE_GUARD_RESOURCE_TYPES in
+// @privacy-shield/network-filter.
+function isCookieGuarded(details) {
+  return details.type !== 'main_frame';
+}
+
 browser.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
-    if (!enabled || !isThirdParty(details)) return {};
+    if (!enabled || !isCookieGuarded(details) || !isThirdParty(details)) return {};
     const initiatorHost = initiatorHostOf(details);
     if (isSiteDisabled(initiatorHost)) return {};
     if (!settingFor(initiatorHost, 'cookieProtection', cookieProtection)) return {};
@@ -381,7 +391,7 @@ browser.webRequest.onBeforeSendHeaders.addListener(
 
 browser.webRequest.onHeadersReceived.addListener(
   (details) => {
-    if (!enabled || !isThirdParty(details)) return {};
+    if (!enabled || !isCookieGuarded(details) || !isThirdParty(details)) return {};
     const initiatorHost = initiatorHostOf(details);
     if (isSiteDisabled(initiatorHost)) return {};
     if (!settingFor(initiatorHost, 'cookieProtection', cookieProtection)) return {};

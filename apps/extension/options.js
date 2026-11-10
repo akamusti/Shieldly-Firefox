@@ -66,8 +66,8 @@ function renderLists(state) {
   const status = state.filterListStatus || {};
   listsEl.innerHTML = '';
 
-  const baseLists = BUILTIN_LISTS.filter((l) => l.id === 'easylist' || l.id === 'easyprivacy' || l.id === 'privacy-removeparam');
-  const languageLists = BUILTIN_LISTS.filter((l) => l.id !== 'easylist' && l.id !== 'easyprivacy' && l.id !== 'privacy-removeparam');
+  const baseLists = BUILTIN_LISTS.filter((l) => l.id === 'easylist' || l.id === 'easyprivacy' || l.id === 'privacy-removeparam' || l.id === 'peter-lowe-blocklist');
+  const languageLists = BUILTIN_LISTS.filter((l) => !baseLists.includes(l));
 
   function appendRow(container, list, builtin) {
     const enabled = builtin ? filterLists[list.id] !== false : list.enabled !== false;
