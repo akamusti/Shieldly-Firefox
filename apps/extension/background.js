@@ -2,6 +2,7 @@ const BUILTIN_LISTS = [
   { id: 'easylist', name: 'EasyList', url: 'https://easylist.to/easylist/easylist.txt' },
   { id: 'easyprivacy', name: 'EasyPrivacy', url: 'https://easylist.to/easylist/easyprivacy.txt' },
   { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection', url: 'https://services.helium.imput.net/ubo/adguard-spyware-url/93b535a2/55a42892/privacy-removeparam.txt' },
+  { id: 'peter-lowe-blocklist', name: "Peter Lowe's Blocklist", url: 'https://services.helium.imput.net/ubo/plowe-0/37f0810b/c20e4257/filters.txt' },
   { id: 'russian', name: 'AdGuard Russian filter', url: 'https://filters.adtidy.org/extension/chromium/filters/1.txt' },
   { id: 'german', name: 'AdGuard German filter', url: 'https://filters.adtidy.org/extension/chromium/filters/6.txt' },
   { id: 'japanese', name: 'AdGuard Japanese filter', url: 'https://filters.adtidy.org/extension/chromium/filters/7.txt' },

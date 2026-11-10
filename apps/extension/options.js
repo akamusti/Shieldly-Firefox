@@ -2,6 +2,7 @@ const BUILTIN_LISTS = [
   { id: 'easylist', name: 'EasyList (ads)' },
   { id: 'easyprivacy', name: 'EasyPrivacy (trackers)' },
   { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection' },
+  { id: 'peter-lowe-blocklist', name: "Peter Lowe's Blocklist" },
   { id: 'russian', name: 'AdGuard Russian filter' },
   { id: 'german', name: 'AdGuard German filter' },
   { id: 'japanese', name: 'AdGuard Japanese filter' },
