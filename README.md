@@ -13,6 +13,8 @@ privacy & adblock engine. Depends on `privacy-shield-core`
   - v0.6.0: uBO-style cosmetic tiers (specific / generic / cached generic),
     blocked-placeholder collapse, and cosmetic hides counted separately from
     blocked requests (popup: "Hidden here (cosmetic)")
+  - v0.7.0: remove tracking query parameters on navigations and fetch/XHR,
+    including scoped and regex rules, while preserving authentication parameters
 
 See `../privacy-shield-core/ROADMAP.md`.
 
