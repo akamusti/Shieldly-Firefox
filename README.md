@@ -44,3 +44,7 @@ pnpm -C ../privacy-shield-core build
 - **Helium filter service** (`services.helium.imput.net`) — hosts the
   `privacy-removeparam` and Peter Lowe filter feeds used by default.
 - Firefox **WebExtensions** APIs (`webRequest`, etc.) — request blocking foundation.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See `LICENSE`.

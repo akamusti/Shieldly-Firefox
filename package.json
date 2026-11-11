@@ -10,5 +10,6 @@
   "dependencies": {
     "@privacy-shield/core-engine": "file:../privacy-shield-core/packages/core-engine",
     "@privacy-shield/shared": "file:../privacy-shield-core/packages/shared"
-  }
+  },
+  "license": "GPL-3.0"
 }
