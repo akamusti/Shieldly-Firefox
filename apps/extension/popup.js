@@ -16,6 +16,7 @@ const els = {
   pageBlocked: document.getElementById('pageBlocked'),
   pagePct: document.getElementById('pagePct'),
   domains: document.getElementById('domains'),
+  pageHidden: document.getElementById('pageHidden'),
   totalBlocked: document.getElementById('totalBlocked'),
   siteCookies: document.getElementById('siteCookies'),
   siteScripts: document.getElementById('siteScripts'),
@@ -29,7 +30,7 @@ const els = {
 let host = '';
 let tabId = -1;
 let state = {};
-let stats = { count: 0, seen: 0, domains: 0, touched: 0 };
+let stats = { count: 0, seen: 0, domains: 0, touched: 0, hidden: 0 };
 let dirty = false;
 
 els.version.textContent = `v${api.runtime.getManifest().version}`;
@@ -61,6 +62,7 @@ async function fetchStats() {
           seen: Number(res.seen) || 0,
           domains: Number(res.domains) || 0,
           touched: Number(res.touched) || 0,
+          hidden: Number(res.hidden) || 0,
         };
         return stats;
       }
@@ -73,6 +75,7 @@ async function fetchStats() {
     seen: 0,
     domains: 0,
     touched: 0,
+    hidden: 0,
   };
   return stats;
 }
@@ -133,6 +136,7 @@ function render() {
   els.pageBlocked.textContent = blocked.toLocaleString();
   els.pagePct.textContent = total > 0 ? ` (${percent}%)` : '';
   els.domains.textContent = stats.domains > 0 ? `${stats.touched} of ${stats.domains}` : '0';
+  els.pageHidden.textContent = stats.hidden.toLocaleString();
   els.totalBlocked.textContent = (state.blocked || 0).toLocaleString();
 
   setSwitch(els.siteCookies, effective(site, 'cookieProtection', cookieProtection));

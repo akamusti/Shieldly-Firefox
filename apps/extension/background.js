@@ -32,6 +32,12 @@ const action = browser.action || browser.browserAction;
 
 let tabBlocked = new Map();
 let tabSeen = new Map();
+// Cosmetic hides are counted apart from blocks: hiding removes no request.
+let tabHidden = new Map();
+// Blocked URLs per tab, so the content script can collapse placeholder elements.
+let tabBlockedUrls = new Map();
+let pendingBlockedUrls = new Set();
+let blockedUrlTimer = null;
 // tabId -> Map(requestHost -> bitmask). Bit 1 = allowed, bit 2 = blocked.
 // The popup derives "Domains connected" from these maps (uBO-style).
 let tabDomains = new Map();
@@ -81,6 +87,7 @@ function tabStats(tabId) {
   return {
     count: tabBlocked.get(tabId) || 0,
     seen: tabSeen.get(tabId) || 0,
+    hidden: tabHidden.get(tabId) || 0,
     domains: map ? map.size : 0,
     touched,
   };
@@ -148,6 +155,9 @@ async function updateAllBadges() {
 function resetTab(tabId) {
   tabBlocked.delete(tabId);
   tabSeen.delete(tabId);
+  tabHidden.delete(tabId);
+  tabBlockedUrls.delete(tabId);
+  pendingBlockedUrls.delete(tabId);
   tabDomains.delete(tabId);
   pendingBadges.delete(tabId);
   setBadge(tabId, '', 'Privacy Shield');
@@ -213,6 +223,8 @@ async function refreshState(keys) {
 
 async function fetchLists() {
   const selectors = new Set();
+  const generic = new Set();
+  const exceptions = new Set();
   const domains = new Set();
   const status = {};
   const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '' } =
@@ -243,15 +255,30 @@ async function fetchLists() {
       for (const raw of text.split(/\r?\n/)) {
         const line = raw.trim();
         if (!line || line.startsWith('!') || line.startsWith('[') || line.startsWith('@@')) continue;
+        // Cosmetic classes first: generic rules (`##.ad`) are cacheable per
+        // site, so they are kept instead of dropped.
+        const cm = line.match(/^([^#]*?)#(@?)([?$%^]?)#(.+)$/);
+        if (cm) {
+          const head = (cm[1] || '').trim();
+          const modifier = cm[3] || '';
+          const selector = (cm[4] || '').trim();
+          if (selector && !modifier) {
+            if (cm[2] === '@') {
+              exceptions.add(`${head}##${selector}`);
+            } else if (head) {
+              selectors.add(`${head}##${selector}`);
+            } else {
+              generic.add(`##${selector}`);
+            }
+          }
+          continue;
+        }
         if (line.includes('$')) continue;
         const dm = line.match(/^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\^/);
         if (dm) {
           domains.add(dm[1]);
           ruleCount++;
         }
-        // Only keep site-specific cosmetic rules; generic rules can hide whole pages.
-        const cm = line.match(/^([a-zA-Z0-9.*-]+)##(.+)$/);
-        if (cm && cm[1] && cm[1] !== '*' && cm[2]) selectors.add(`${cm[1]}##${cm[2]}`);
       }
       status[list.id].updatedAt = Date.now();
       status[list.id].ruleCount = ruleCount;
@@ -271,6 +298,8 @@ async function fetchLists() {
   cosmeticSelectors = Array.from(selectors);
   await browser.storage.local.set({
     cosmeticSelectors,
+    cosmeticGeneric: Array.from(generic),
+    cosmeticExceptions: Array.from(exceptions),
     filterListStatus: status,
     activeRuleCount: domains.size,
   });
@@ -280,11 +309,54 @@ async function fetchLists() {
 // Batch counters so a burst of blocked requests does not race on storage writes.
 let pendingBlocked = 0;
 let pendingSites = {};
+let pendingHidden = 0;
 let pendingLog = [];
 let flushTimer = null;
 
+const MAX_BLOCKED_URLS = 60;
+
+function noteBlockedUrl(tabId, url) {
+  if (typeof tabId !== 'number' || tabId < 0 || typeof url !== 'string' || url === '') return;
+  let urls = tabBlockedUrls.get(tabId);
+  if (!urls) {
+    urls = [];
+    tabBlockedUrls.set(tabId, urls);
+  }
+  if (urls.includes(url)) return;
+  if (urls.length >= MAX_BLOCKED_URLS) urls.shift();
+  urls.push(url);
+  pendingBlockedUrls.add(tabId);
+  if (!blockedUrlTimer) blockedUrlTimer = setTimeout(flushBlockedUrls, 500);
+}
+
+async function flushBlockedUrls() {
+  blockedUrlTimer = null;
+  const tabIds = Array.from(pendingBlockedUrls);
+  pendingBlockedUrls.clear();
+  for (const tabId of tabIds) {
+    const urls = tabBlockedUrls.get(tabId) || [];
+    if (!urls.length) continue;
+    try {
+      await browser.tabs.sendMessage(tabId, { type: 'blockedResources', urls: urls.slice() });
+    } catch {
+      // No content script in this frame (PDF viewer, error page, ...).
+    }
+  }
+}
+
 function scheduleFlush() {
   if (!flushTimer) flushTimer = setTimeout(flushStats, 400);
+}
+
+// Cosmetic hides are tracked separately from blocks: they remove no request.
+function noteHidden(tabId, count) {
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  if (n === 0) return;
+  if (typeof tabId === 'number' && tabId >= 0) {
+    tabHidden.set(tabId, (tabHidden.get(tabId) || 0) + n);
+  }
+  pendingHidden += n;
+  scheduleFlush();
 }
 
 function recordBlocked(url, initiatorHost, tabId) {
@@ -294,6 +366,7 @@ function recordBlocked(url, initiatorHost, tabId) {
   if (pendingLog.length > 200) pendingLog = pendingLog.slice(-200);
   if (typeof tabId === 'number' && tabId >= 0) {
     tabBlocked.set(tabId, (tabBlocked.get(tabId) || 0) + 1);
+    noteBlockedUrl(tabId, url);
     scheduleBadge(tabId);
   }
   scheduleFlush();
@@ -303,24 +376,33 @@ async function flushStats() {
   flushTimer = null;
   const blockedInc = pendingBlocked;
   const siteInc = pendingSites;
+  const hiddenInc = pendingHidden;
   const logs = pendingLog;
   pendingBlocked = 0;
   pendingSites = {};
+  pendingHidden = 0;
   pendingLog = [];
-  if (!blockedInc && !logs.length) return;
+  if (!blockedInc && !hiddenInc && !logs.length) return;
 
-  const { blocked = 0, siteStats = {}, requestLog = [] } =
-    await browser.storage.local.get(['blocked', 'siteStats', 'requestLog']);
-  const nextSites = { ...siteStats };
-  for (const [host, count] of Object.entries(siteInc)) {
-    nextSites[host] = (nextSites[host] || 0) + count;
+  if (hiddenInc) {
+    const { cosmeticHidden = 0 } = await browser.storage.local.get('cosmeticHidden');
+    await browser.storage.local.set({ cosmeticHidden: cosmeticHidden + hiddenInc });
   }
-  const nextLog = [...logs.reverse(), ...requestLog].slice(0, 200);
-  await browser.storage.local.set({
-    blocked: blocked + blockedInc,
-    siteStats: nextSites,
-    requestLog: nextLog,
-  });
+
+  if (blockedInc || logs.length) {
+    const { blocked = 0, siteStats = {}, requestLog = [] } =
+      await browser.storage.local.get(['blocked', 'siteStats', 'requestLog']);
+    const nextSites = { ...siteStats };
+    for (const [host, count] of Object.entries(siteInc)) {
+      nextSites[host] = (nextSites[host] || 0) + count;
+    }
+    const nextLog = [...logs.reverse(), ...requestLog].slice(0, 200);
+    await browser.storage.local.set({
+      blocked: blocked + blockedInc,
+      siteStats: nextSites,
+      requestLog: nextLog,
+    });
+  }
 }
 
 browser.runtime.onStartup.addListener(async () => { await fetchLists(); await updateAllBadges(); });
@@ -349,6 +431,12 @@ browser.storage.onChanged.addListener((changes) => {
 });
 
 browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === 'cosmeticStats') {
+    const tabId = sender && sender.tab && typeof sender.tab.id === 'number' ? sender.tab.id : -1;
+    noteHidden(tabId, msg.hidden);
+    sendResponse({ ok: true });
+    return true;
+  }
   if (msg && msg.type === 'getTabStats') {
     const tabId = typeof msg.tabId === 'number' ? msg.tabId : sender && sender.tab ? sender.tab.id : -1;
     sendResponse(tabStats(tabId));
@@ -374,6 +462,9 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
 browser.tabs.onRemoved.addListener((tabId) => {
   tabBlocked.delete(tabId);
   tabSeen.delete(tabId);
+  tabHidden.delete(tabId);
+  tabBlockedUrls.delete(tabId);
+  pendingBlockedUrls.delete(tabId);
   tabDomains.delete(tabId);
   pendingBadges.delete(tabId);
 });

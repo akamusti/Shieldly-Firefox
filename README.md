@@ -10,6 +10,9 @@ privacy & adblock engine. Depends on `privacy-shield-core`
 - Phase 1 — Core Adblock: complete
 - Phase 2 — Control & Privacy: complete (v0.3.0 adapter update)
 - Phase 3 — Advanced Protection & Polish: in progress
+  - v0.6.0: uBO-style cosmetic tiers (specific / generic / cached generic),
+    blocked-placeholder collapse, and cosmetic hides counted separately from
+    blocked requests (popup: "Hidden here (cosmetic)")
 
 See `../privacy-shield-core/ROADMAP.md`.
 
