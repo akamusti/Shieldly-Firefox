@@ -16,6 +16,192 @@ const BUILTIN_LISTS = [
   { id: 'chinese', name: 'AdGuard Chinese filter', url: 'https://filters.adtidy.org/extension/chromium/filters/224.txt' },
 ];
 
+// --- filter list parsing ----------------------------------------------------
+// Mirrors @privacy-shield/filter-parser and the collapse/removeparam parts of
+// @privacy-shield/cosmetic-filter. Extensions ship plain JS, so this is a
+// mirror, not an import.
+
+// Auth/session parameters are never stripped. They look like tracking
+// parameters to a filter list but removing them can break a login or an OAuth
+// round-trip, so they are always kept.
+const REMOVE_PARAM_DENYLIST = new Set([
+  'code', 'state', 'token', 'access_token', 'id_token', 'refresh_token',
+  'session', 'sessionid', 'session_id', 'auth', 'authorization',
+  'password', 'passwd', 'otp', 'sig', 'signature', 'redirect_uri',
+]);
+
+const HOSTS_SINK_IPS = new Set(['0.0.0.0', '127.0.0.1', '::', '::1', '255.255.255.255']);
+const HOSTNAME_PATTERN = /^(?:[a-z0-9_](?:[a-z0-9_-]*[a-z0-9])?\.)+[a-z]{2,}$/i;
+
+// Hosts-file entry -> sinkholed domains (`127.0.0.1 a.com b.com # note`).
+function parseHostsLine(line) {
+  if (!line || line.startsWith('#')) return [];
+  const tokens = line.split(/\s+/);
+  let candidate = tokens;
+  if (tokens.length > 1) {
+    const first = tokens[0];
+    if (HOSTS_SINK_IPS.has(first)) candidate = tokens.slice(1);
+    else if (!HOSTNAME_PATTERN.test(first)) return [];
+  }
+  const domains = [];
+  for (const token of candidate) {
+    if (token.startsWith('#')) break;
+    if (!HOSTNAME_PATTERN.test(token)) return [];
+    domains.push(token.toLowerCase());
+  }
+  return domains;
+}
+
+// Parses one list into the shapes the adapters need: block domains, cosmetic
+// rules (specific / generic / exceptions) and removeparam rules.
+function parseFilterList(text, options) {
+  const config = options || {};
+  const regexSupported = config.regexRemoveParams !== false;
+
+  const result = {
+    domains: new Set(),
+    removeParams: new Set(),
+    scopedRemoveParams: new Map(),
+    regexRemoveParams: [],
+    cosmeticSelectors: new Set(),
+    cosmeticGeneric: new Set(),
+    cosmeticExceptions: new Set(),
+    ruleCount: 0,
+    unsupported: 0,
+  };
+
+  const addRemoveParam = (value, hostScope) => {
+    const raw = (value || '').trim();
+    if (!raw) return false;
+    if (raw.length > 2 && raw.startsWith('/') && raw.endsWith('/')) {
+      if (!regexSupported) return false;
+      try {
+        new RegExp(raw.slice(1, -1));
+      } catch {
+        return false;
+      }
+      if (!result.regexRemoveParams.includes(raw)) result.regexRemoveParams.push(raw);
+      return true;
+    }
+    if (REMOVE_PARAM_DENYLIST.has(raw.toLowerCase())) return false;
+    if (hostScope) {
+      let set = result.scopedRemoveParams.get(hostScope);
+      if (!set) {
+        set = new Set();
+        result.scopedRemoveParams.set(hostScope, set);
+      }
+      if (set.has(raw)) return false;
+      set.add(raw);
+      return true;
+    }
+    if (result.removeParams.has(raw)) return false;
+    result.removeParams.add(raw);
+    return true;
+  };
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('!') || line.startsWith('[')) continue;
+    if (line.startsWith('@@')) continue;
+
+    // Cosmetic classes: ## (specific/generic) and #@# (exception).
+    const cosmetic = line.match(/^([^#]*?)#(@?)([?$%^]?)#(.+)$/);
+    if (cosmetic) {
+      const head = (cosmetic[1] || '').trim();
+      const modifier = cosmetic[3] || '';
+      const selector = (cosmetic[4] || '').trim();
+      if (!selector || modifier) {
+        result.unsupported += 1;
+        continue;
+      }
+      if (cosmetic[2] === '@') result.cosmeticExceptions.add(`${head}##${selector}`);
+      else if (head) result.cosmeticSelectors.add(`${head}##${selector}`);
+      else result.cosmeticGeneric.add(`##${selector}`);
+      result.ruleCount += 1;
+      continue;
+    }
+
+    if (line.startsWith('#')) continue;
+
+    // Hosts files: `127.0.0.1 ads.test`, `0.0.0.0 ads.test`, bare `ads.test`.
+    const hosts = parseHostsLine(line);
+    if (hosts.length) {
+      for (const domain of hosts) {
+        if (result.domains.has(domain)) continue;
+        result.domains.add(domain);
+        result.ruleCount += 1;
+      }
+      continue;
+    }
+
+    const dollar = line.indexOf('$');
+    const pattern = dollar >= 0 ? line.slice(0, dollar).trim() : line;
+    const listOptions = dollar >= 0 ? line.slice(dollar + 1).split(',') : [];
+
+    let removeParam = null;
+    let otherOption = false;
+    for (const option of listOptions) {
+      const value = option.trim();
+      if (!value) continue;
+      if (value === 'removeparam') {
+        removeParam = '';
+        continue;
+      }
+      if (value.startsWith('removeparam=')) {
+        removeParam = value.slice('removeparam='.length);
+        continue;
+      }
+      otherOption = true;
+    }
+
+    const domainMatch = /^\|\|([a-z0-9][a-z0-9.-]*\.[a-z]{2,})\^$/i.exec(pattern);
+    const scope = domainMatch ? (domainMatch[1] || '').toLowerCase() : '';
+
+    if (removeParam !== null) {
+      // A bare `$removeparam` removes every parameter; too destructive.
+      const globalPattern = pattern === '' || pattern === '*';
+      const regexParam = removeParam.length > 2 && removeParam.startsWith('/') && removeParam.endsWith('/');
+      if (
+        otherOption ||
+        removeParam === '' ||
+        (!scope && !globalPattern) ||
+        (regexParam && !globalPattern) ||
+        !addRemoveParam(removeParam, scope)
+      ) {
+        result.unsupported += 1;
+        continue;
+      }
+      result.ruleCount += 1;
+      continue;
+    }
+
+    if (scope && !otherOption) {
+      if (!result.domains.has(scope)) {
+        result.domains.add(scope);
+        result.ruleCount += 1;
+      }
+      continue;
+    }
+
+    result.unsupported += 1;
+  }
+
+  return result;
+}
+
+function compileRemoveParamRegex(list) {
+  const compiled = [];
+  for (const raw of list || []) {
+    try {
+      compiled.push(new RegExp(raw.slice(1, -1)));
+    } catch {
+      // Invalid regex in the list: ignore that rule.
+    }
+  }
+  return compiled;
+}
+// --- end filter list parsing ------------------------------------------------
+
 let blockedDomains = new Set();
 let cosmeticSelectors = [];
 let disabledSites = [];
@@ -23,6 +209,12 @@ let siteSettings = {};
 let enabled = true;
 let cookieProtection = true;
 let scriptControl = false;
+
+// $removeparam state. Firefox can rewrite a URL before it is sent, so the
+// tracking parameters are removed here instead of only hidden in the UI.
+let globalRemoveParams = new Set();
+let scopedRemoveParams = new Map();
+let regexRemoveParams = [];
 
 // Action badge shown on the toolbar icon, so users see the per-tab blocked
 // count without opening the popup (like uBlock Origin / Brave Shields).
@@ -226,6 +418,9 @@ async function fetchLists() {
   const generic = new Set();
   const exceptions = new Set();
   const domains = new Set();
+  const params = new Set();
+  const scoped = new Map();
+  const regexParams = [];
   const status = {};
   const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '' } =
     await browser.storage.local.get(['filterLists', 'customRulesText']);
@@ -244,7 +439,6 @@ async function fetchLists() {
     };
     if (!listEnabled) continue;
 
-    let ruleCount = 0;
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
@@ -252,36 +446,33 @@ async function fetchLists() {
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
-      for (const raw of text.split(/\r?\n/)) {
-        const line = raw.trim();
-        if (!line || line.startsWith('!') || line.startsWith('[') || line.startsWith('@@')) continue;
-        // Cosmetic classes first: generic rules (`##.ad`) are cacheable per
-        // site, so they are kept instead of dropped.
-        const cm = line.match(/^([^#]*?)#(@?)([?$%^]?)#(.+)$/);
-        if (cm) {
-          const head = (cm[1] || '').trim();
-          const modifier = cm[3] || '';
-          const selector = (cm[4] || '').trim();
-          if (selector && !modifier) {
-            if (cm[2] === '@') {
-              exceptions.add(`${head}##${selector}`);
-            } else if (head) {
-              selectors.add(`${head}##${selector}`);
-            } else {
-              generic.add(`##${selector}`);
-            }
-          }
-          continue;
+      // The helium mirror answers 406 with a short explanation when the client
+      // does not negotiate brotli. That body is not a filter list, and counting
+      // it as "0 rules" hid the real problem.
+      if (/brotli-encoded/i.test(text)) {
+        throw new Error('List server requires brotli; the browser did not negotiate it');
+      }
+      const parsed = parseFilterList(text);
+      for (const domain of parsed.domains) domains.add(domain);
+      for (const selector of parsed.cosmeticSelectors) selectors.add(selector);
+      for (const selector of parsed.cosmeticGeneric) generic.add(selector);
+      for (const selector of parsed.cosmeticExceptions) exceptions.add(selector);
+      for (const param of parsed.removeParams) params.add(param);
+      for (const [host, list] of parsed.scopedRemoveParams) {
+        let set = scoped.get(host);
+        if (!set) {
+          set = new Set();
+          scoped.set(host, set);
         }
-        if (line.includes('$')) continue;
-        const dm = line.match(/^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\^/);
-        if (dm) {
-          domains.add(dm[1]);
-          ruleCount++;
-        }
+        for (const param of list) set.add(param);
+      }
+      for (const entry of parsed.regexRemoveParams) {
+        if (!regexParams.includes(entry)) regexParams.push(entry);
       }
       status[list.id].updatedAt = Date.now();
-      status[list.id].ruleCount = ruleCount;
+      // Counts every rule the list contributes (block domains, cosmetic rules,
+      // removeparam), not just `||domain^` lines.
+      status[list.id].ruleCount = parsed.ruleCount;
     } catch (e) {
       status[list.id].error = String((e && e.message) || e);
       console.warn('List fetch failed', list.url, e);
@@ -290,18 +481,38 @@ async function fetchLists() {
 
   for (const raw of customRulesText.split(/\r?\n/)) {
     const line = raw.trim();
+    const options = line.includes('$') ? line.slice(line.indexOf('$') + 1).split(',') : [];
+    const hasRemoveParam = options.some((option) => /^removeparam(?:=|$)/i.test(option.trim()));
     const dm = line.match(/^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\^/);
-    if (dm) domains.add(dm[1]);
+    if (dm && !hasRemoveParam) domains.add(dm[1].toLowerCase());
+    const parsed = parseFilterList(line);
+    for (const domain of parsed.domains) domains.add(domain);
+    for (const param of parsed.removeParams) params.add(param);
+    for (const [host, list] of parsed.scopedRemoveParams) {
+      let set = scoped.get(host);
+      if (!set) {
+        set = new Set();
+        scoped.set(host, set);
+      }
+      for (const param of list) set.add(param);
+    }
+    for (const entry of parsed.regexRemoveParams) {
+      if (!regexParams.includes(entry)) regexParams.push(entry);
+    }
   }
 
   blockedDomains = domains;
   cosmeticSelectors = Array.from(selectors);
+  globalRemoveParams = params;
+  scopedRemoveParams = scoped;
+  regexRemoveParams = compileRemoveParamRegex(regexParams);
   await browser.storage.local.set({
     cosmeticSelectors,
     cosmeticGeneric: Array.from(generic),
     cosmeticExceptions: Array.from(exceptions),
     filterListStatus: status,
     activeRuleCount: domains.size,
+    activeRemoveParamCount: params.size,
   });
   await refreshState();
 }
@@ -472,26 +683,89 @@ browser.tabs.onRemoved.addListener((tabId) => {
 browser.webRequest.onBeforeRequest.addListener(
   (details) => {
     if (!enabled) return {};
-    if (details.type === 'main_frame') return {};
     const host = hostOf(details.url);
     if (!host) return {};
     const initiatorHost = initiatorHostOf(details);
     if (initiatorHost && isSiteDisabled(initiatorHost)) return {};
-    // Only block third-party requests so first-party site resources always load.
-    const thirdParty = !!initiatorHost && !sameSite(initiatorHost, host);
-    let blocked = false;
-    if (thirdParty) {
-      blocked = (settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script') ||
-        isBlockedHost(host);
+
+    // Top-level navigations are never blocked, but their query string can still
+    // be cleaned below.
+    if (details.type !== 'main_frame') {
+      // Only block third-party requests so first-party site resources always load.
+      const thirdParty = !!initiatorHost && !sameSite(initiatorHost, host);
+      const blocked = thirdParty &&
+        ((settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script') ||
+          isBlockedHost(host));
+      noteRequest(details.tabId, host, blocked);
+      if (blocked) {
+        recordBlocked(details.url, initiatorHost, details.tabId);
+        return { cancel: true };
+      }
     }
-    noteRequest(details.tabId, host, blocked);
-    if (!blocked) return {};
-    recordBlocked(details.url, initiatorHost, details.tabId);
-    return { cancel: true };
+
+    // A block always wins: removeparam only runs for requests that were allowed.
+    if (details.method === 'GET' && TRACKING_REDIRECT_TYPES.has(details.type)) {
+      const rewritten = stripTrackingParams(details.url, host);
+      if (rewritten && rewritten !== details.url) return { redirectUrl: rewritten };
+    }
+    return {};
   },
   { urls: ['<all_urls>'] },
   ['blocking']
 );
+
+// Resource types whose query string is rewritten: navigations and fetch/XHR.
+// Redirecting images/scripts buys nothing and costs a round trip.
+const TRACKING_REDIRECT_TYPES = new Set(['main_frame', 'sub_frame', 'xmlhttprequest']);
+
+// uBO's `$removeparam`: rewrite the URL so the tracking parameters never reach
+// the site. Auth/session parameters are denylisted at parse time, so a login or
+// OAuth round-trip is never broken by a list that thinks `token` is tracking.
+function stripTrackingParams(url, host) {
+  if (!globalRemoveParams.size && !scopedRemoveParams.size && !regexRemoveParams.length) return null;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  if (!parsed.search) return null;
+
+  const scoped = new Set();
+  const hostParts = host.split('.');
+  for (let i = 0; i < hostParts.length; i++) {
+    const hostParams = scopedRemoveParams.get(hostParts.slice(i).join('.'));
+    if (hostParams) {
+      for (const name of hostParams) scoped.add(name);
+    }
+  }
+  const drop = [];
+  const seen = new Set();
+  for (const name of parsed.searchParams.keys()) {
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const lower = name.toLowerCase();
+    if (REMOVE_PARAM_DENYLIST.has(lower)) continue;
+    if (globalRemoveParams.has(name) || globalRemoveParams.has(lower)) {
+      drop.push(name);
+      continue;
+    }
+    if (scoped.has(name) || scoped.has(lower)) {
+      drop.push(name);
+      continue;
+    }
+    for (const pattern of regexRemoveParams) {
+      if (pattern.test(name)) {
+        drop.push(name);
+        break;
+      }
+    }
+  }
+  if (!drop.length) return null;
+  for (const name of drop) parsed.searchParams.delete(name);
+  return parsed.href;
+}
 
 function isThirdParty(details) {
   const host = hostOf(details.url);

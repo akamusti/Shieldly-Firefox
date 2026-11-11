@@ -5,7 +5,8 @@
   "description": "Firefox (WebExtensions) adapter and extension for Privacy Shield.",
   "scripts": {
     "dev": "echo 'dev not configured yet'",
-    "build": "echo 'build not configured yet'"
+    "build": "echo 'build not configured yet'",
+    "test": "node --test"
   },
   "dependencies": {
     "@privacy-shield/core-engine": "file:../privacy-shield-core/packages/core-engine",
