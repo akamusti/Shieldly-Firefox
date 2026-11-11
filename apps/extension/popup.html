@@ -15,14 +15,12 @@
       --accent: #2dd4bf;
       --accent-soft: rgba(45, 212, 191, 0.13);
       --danger: #f87171;
-      --danger-soft: rgba(248, 113, 113, 0.12);
-      --cyan: #7dd3fc;
+      --off: #5c6b7f;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
     body {
       width: 320px;
-      padding: 12px;
       font-family: system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
@@ -30,71 +28,152 @@
     }
     button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
     button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    button:disabled { cursor: default; }
 
-    .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .brand { display: flex; align-items: center; gap: 9px; }
-    .mark {
+    /* --- Sticky header: hostname + power switch (uBO layout) --- */
+    #sticky {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 10px 12px 8px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    #hostname {
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.35;
+      word-break: break-all;
+      color: var(--muted);
+    }
+    #hostname b { color: var(--text); font-weight: 650; }
+    #siteState {
+      margin-top: 2px;
+      text-align: center;
+      font-size: 10.5px;
+      color: var(--muted);
+    }
+    #siteState[data-state="on"] { color: var(--accent); }
+
+    #stickyTools {
+      display: grid;
+      grid-template-columns: 40px 1fr 40px;
+      align-items: center;
+    }
+    #power {
+      grid-column: 2;
+      justify-self: center;
       display: grid;
       place-items: center;
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      border: 1px solid rgba(45, 212, 191, 0.3);
-      background: rgba(45, 212, 191, 0.08);
+      width: 96px;
+      height: 78px;
+      margin: 2px 0;
       color: var(--accent);
+      transition: color 140ms ease;
     }
-    .mark svg { width: 16px; height: 16px; }
-    .title { font-size: 13.5px; font-weight: 600; line-height: 1.2; }
-    .version { margin-top: 1px; font-size: 10.5px; color: var(--muted); }
+    #power svg { width: 62px; height: 62px; }
+    #power[data-on="true"] svg { filter: drop-shadow(0 0 9px rgba(45, 212, 191, 0.4)); }
+    #power[data-on="false"] { color: var(--off); }
+    #power[data-on="false"] svg { filter: none; }
+    #power:disabled { opacity: 0.4; }
+    #power:hover:not(:disabled) { color: #5eead4; }
+    #power[data-on="false"]:hover:not(:disabled) { color: #93a4b8; }
 
-    .site-card {
+    #reloadTab {
+      grid-column: 3;
+      justify-self: end;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      visibility: hidden;
+      transition: color 120ms ease, background 120ms ease;
+    }
+    #reloadTab.visible { visibility: visible; }
+    #reloadTab:hover { color: var(--accent); background: var(--panel-2); }
+    #reloadTab svg { width: 15px; height: 15px; }
+
+    /* --- Stats, uBO style: label above value --- */
+    #basicStats {
+      margin: 0 12px;
+      padding: 10px 0 6px;
+      display: grid;
+      justify-items: center;
+    }
+    #basicStats .stat-label {
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+    #basicStats .stat-value {
+      margin-bottom: 7px;
+      font-size: 17px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      line-height: 1.15;
+    }
+    #basicStats .stat-value:last-child { margin-bottom: 0; }
+    #basicStats .pct {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0;
+    }
+
+    /* --- Tool ribbons (per-site switches + actions) --- */
+    .toolRibbon {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
+      border-top: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--panel);
+    }
+    .toolRibbon:last-of-type { border-top: none; }
+
+    .tool {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 4px 9px;
+      color: var(--muted);
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .tool:hover:not(:disabled) { background: var(--panel-2); color: #cfdaea; }
+    .tool:disabled { opacity: 0.45; }
+    .tool .icon { position: relative; display: grid; place-items: center; height: 24px; width: 24px; }
+    .tool .icon svg { width: 21px; height: 21px; }
+    .tool .caption { font-size: 10px; line-height: 1.15; text-align: center; }
+    .tool[data-on="true"] { color: var(--accent); }
+    .tool[data-on="true"]:hover:not(:disabled) { color: #5eead4; }
+    .tool .nope {
+      position: absolute;
+      inset: 0;
+      color: var(--bg);
+      opacity: 0;
+      transition: opacity 120ms ease;
+      pointer-events: none;
+    }
+    .tool .nope svg { width: 24px; height: 24px; }
+    .tool[data-on="true"] .nope { opacity: 1; }
+
+    /* --- Footer --- */
+    #footer { padding: 8px 12px 10px; }
+    .global-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 11px 12px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: var(--panel);
+      padding: 4px 0 10px;
+      font-size: 12.5px;
     }
-    .site { font-size: 14px; font-weight: 600; line-height: 1.3; word-break: break-all; }
-    .site-state { margin-top: 2px; font-size: 11.5px; color: var(--muted); }
-    .site-state.active { color: var(--accent); }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      flex: 0 0 auto;
-      padding: 5px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--panel-2);
-      color: var(--muted);
-      font-size: 11.5px;
-      font-weight: 500;
-      transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
-    }
-    .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.7; }
-    .pill[data-on="true"] { color: var(--accent); border-color: rgba(45, 212, 191, 0.35); background: var(--accent-soft); }
-    .pill[data-on="false"] { color: var(--danger); border-color: rgba(248, 113, 113, 0.32); background: var(--danger-soft); }
-    .pill:disabled { opacity: 0.5; cursor: default; }
-
-    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
-    .stat {
-      padding: 8px 6px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--panel);
-      text-align: center;
-    }
-    .stat-value { display: block; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
-    .stat-label { display: block; margin-top: 1px; font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
-
-    .section-title { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: var(--cyan); }
-    .panel { padding: 2px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
-    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border-soft); }
-    .row:first-child { border-top: none; }
-    .row-label { font-size: 12.5px; }
+    .global-row .label { color: var(--text); }
+    .global-row .hint { display: block; margin-top: 1px; font-size: 10.5px; color: var(--muted); }
 
     .switch {
       position: relative;
@@ -120,131 +199,133 @@
     .switch[aria-checked="true"] .knob { transform: translateX(16px); background: var(--accent); box-shadow: 0 0 8px rgba(45, 212, 191, 0.45); }
     .switch:disabled { opacity: 0.45; cursor: default; }
 
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-    .action {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 8px;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      background: var(--panel);
-      color: #cfdaea;
-      font-size: 12px;
-      transition: background 120ms ease;
-    }
-    .action:hover:not(:disabled) { background: var(--panel-2); }
-    .action:disabled { opacity: 0.5; cursor: default; }
-    .action svg { width: 13px; height: 13px; color: var(--muted); }
-
-    .footer { margin-top: 10px; }
-    .link-row {
+    #versionRow {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      width: 100%;
-      padding: 9px 0 1px;
+      padding-top: 9px;
       border-top: 1px solid var(--border-soft);
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--muted);
     }
-    .link-row:hover { color: var(--text); }
-    .chev { color: var(--muted); font-size: 14px; line-height: 1; }
   </style>
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <span class="mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3 5 6v5.4c0 4.6 2.9 8 7 9.6 4.1-1.6 7-5 7-9.6V6l-7-3Z" />
-          <path d="m9 12 2 2 4-4.5" />
+  <header id="sticky">
+    <div id="hostname"><span id="hostSub"></span><b id="hostDomain">Internal page</b></div>
+    <div id="siteState">Checking…</div>
+    <div id="stickyTools">
+      <button id="reloadTab" title="Reload the page to apply changes" aria-label="Reload the page to apply changes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+          <path d="M21 3v6h-6" />
         </svg>
-      </span>
-      <div>
-        <div class="title">Privacy Shield</div>
-        <div class="version" id="version">v—</div>
-      </div>
+      </button>
+      <button id="power" role="switch" aria-checked="true" data-on="true" title="Turn off protection for this site" aria-label="Toggle protection for this site">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <path d="M12 2.5v8.5" />
+          <path d="M6.2 6.2a8 8 0 1 0 11.6 0" />
+        </svg>
+      </button>
     </div>
   </header>
 
-  <section class="site-card">
-    <div>
-      <div class="site" id="site">—</div>
-      <div class="site-state" id="siteState">Checking…</div>
-    </div>
-    <button class="pill" id="siteToggle" data-on="true" aria-pressed="true" title="Toggle protection for this site">
-      <span class="dot" aria-hidden="true"></span>
-      <span id="siteToggleLabel">On</span>
+  <section id="basicStats" aria-label="Statistics">
+    <span class="stat-label">Blocked on this page</span>
+    <span class="stat-value"><span id="pageBlocked">0</span><span class="pct" id="pagePct"></span></span>
+    <span class="stat-label">Domains connected</span>
+    <span class="stat-value" id="domains">0</span>
+    <span class="stat-label">Blocked since install</span>
+    <span class="stat-value" id="totalBlocked">0</span>
+  </section>
+
+  <div id="extraTools" class="toolRibbon" aria-label="Site controls">
+    <button class="tool" id="siteCookies" role="switch" aria-checked="true" data-on="true" title="Block third-party cookies on this site">
+      <span class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M21 12a9 9 0 1 1-9.8-8.97 3.5 3.5 0 0 0 4.6 4.6A3.5 3.5 0 0 0 20.4 12Z" />
+          <circle cx="9" cy="10" r=".9" fill="currentColor" stroke="none" />
+          <circle cx="13" cy="15" r=".9" fill="currentColor" stroke="none" />
+          <circle cx="8" cy="15.5" r=".7" fill="currentColor" stroke="none" />
+        </svg>
+        <span class="nope" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <path d="M4 4l16 16" />
+          </svg>
+        </span>
+      </span>
+      <span class="caption">Cookies</span>
     </button>
-  </section>
-
-  <section class="stats">
-    <div class="stat">
-      <span class="stat-value" id="siteBlocked">0</span>
-      <span class="stat-label">Here</span>
-    </div>
-    <div class="stat">
-      <span class="stat-value" id="totalBlocked">0</span>
-      <span class="stat-label">Total</span>
-    </div>
-    <div class="stat">
-      <span class="stat-value" id="rules">0</span>
-      <span class="stat-label">Rules</span>
-    </div>
-  </section>
-
-  <h2 class="section-title">Site controls</h2>
-  <section class="panel">
-    <div class="row">
-      <span class="row-label">Cookies</span>
-      <button class="switch" id="siteCookies" role="switch" aria-checked="true" aria-label="Block third-party cookies on this site">
-        <span class="knob"></span>
-      </button>
-    </div>
-    <div class="row">
-      <span class="row-label">Scripts</span>
-      <button class="switch" id="siteScripts" role="switch" aria-checked="false" aria-label="Block third-party scripts on this site">
-        <span class="knob"></span>
-      </button>
-    </div>
-    <div class="row">
-      <span class="row-label">Hide ads</span>
-      <button class="switch" id="siteCosmetic" role="switch" aria-checked="true" aria-label="Hide ads on this site">
-        <span class="knob"></span>
-      </button>
-    </div>
-  </section>
-
-  <div class="actions">
-    <button class="action" id="picker">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <circle cx="12" cy="12" r="7" />
-        <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-      </svg>
-      Pick element
+    <button class="tool" id="siteScripts" role="switch" aria-checked="false" data-on="false" title="Block third-party scripts on this site">
+      <span class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14" />
+        </svg>
+        <span class="nope" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <path d="M4 4l16 16" />
+          </svg>
+        </span>
+      </span>
+      <span class="caption">Scripts</span>
     </button>
-    <button class="action" id="openLog">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <path d="M5 7h14M5 12h14M5 17h9" />
-      </svg>
-      Request log
+    <button class="tool" id="siteCosmetic" role="switch" aria-checked="true" data-on="true" title="Hide ads on this site">
+      <span class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+          <circle cx="12" cy="12" r="2.8" />
+        </svg>
+        <span class="nope" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <path d="M4 4l16 16" />
+          </svg>
+        </span>
+      </span>
+      <span class="caption">Hide ads</span>
     </button>
   </div>
 
-  <section class="panel footer">
-    <div class="row">
-      <span class="row-label">Global protection</span>
+  <div id="basicTools" class="toolRibbon" aria-label="Tools">
+    <button class="tool" id="picker" title="Pick an element to hide on this site">
+      <span class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m14 4 6 6M17 7l-8.5 8.5-1.8 4.3 4.3-1.8L19.5 9.5" />
+          <path d="m4 20 3.5-3.5" />
+        </svg>
+      </span>
+      <span class="caption">Pick element</span>
+    </button>
+    <button class="tool" id="openLog" title="Open the request log">
+      <span class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+          <path d="M5 7h14M5 12h14M5 17h9" />
+        </svg>
+      </span>
+      <span class="caption">Request log</span>
+    </button>
+    <button class="tool" id="openOptions" title="Open advanced settings">
+      <span class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+        </svg>
+      </span>
+      <span class="caption">Settings</span>
+    </button>
+  </div>
+
+  <footer id="footer">
+    <div class="global-row">
+      <span class="label">Protection everywhere<span class="hint">Per-site choices override this</span></span>
       <button class="switch" id="toggle" role="switch" aria-checked="true" aria-label="Toggle global protection">
         <span class="knob"></span>
       </button>
     </div>
-    <button class="link-row" id="openOptions">
-      <span>Advanced settings</span>
-      <span class="chev" aria-hidden="true">›</span>
-    </button>
-  </section>
+    <div id="versionRow">
+      <span>Version</span>
+      <span id="version">—</span>
+    </div>
+  </footer>
 
   <script src="popup.js"></script>
 </body>

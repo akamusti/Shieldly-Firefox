@@ -31,6 +31,10 @@ const BADGE_FG = '#062a27';
 const action = browser.action || browser.browserAction;
 
 let tabBlocked = new Map();
+let tabSeen = new Map();
+// tabId -> Map(requestHost -> bitmask). Bit 1 = allowed, bit 2 = blocked.
+// The popup derives "Domains connected" from these maps (uBO-style).
+let tabDomains = new Map();
 let pendingBadges = new Set();
 let badgeTimer = null;
 
@@ -44,6 +48,42 @@ function compactCount(count) {
   if (k < 999.5) return `${Math.round(k)}K`;
   const m = n / 1000000;
   return `${(Math.round(m * 10) / 10).toString().replace(/\.0$/, '')}M`;
+}
+
+function noteDomain(tabId, requestHost, blocked) {
+  if (typeof tabId !== 'number' || tabId < 0 || !requestHost) return;
+  let map = tabDomains.get(tabId);
+  if (!map) {
+    map = new Map();
+    tabDomains.set(tabId, map);
+  }
+  if (!map.has(requestHost) && map.size >= 500) return;
+  map.set(requestHost, (map.get(requestHost) || 0) | (blocked ? 2 : 1));
+}
+
+// Records every observed request once and whether its domain was blocked.
+// Allowed requests also count toward the page total so the popup can show
+// an uBO-style percentage.
+function noteRequest(tabId, requestHost, blocked) {
+  if (typeof tabId !== 'number' || tabId < 0) return;
+  tabSeen.set(tabId, (tabSeen.get(tabId) || 0) + 1);
+  noteDomain(tabId, requestHost, blocked);
+}
+
+function tabStats(tabId) {
+  const map = tabDomains.get(tabId);
+  let touched = 0;
+  if (map) {
+    for (const bits of map.values()) {
+      if (bits & 2) touched += 1;
+    }
+  }
+  return {
+    count: tabBlocked.get(tabId) || 0,
+    seen: tabSeen.get(tabId) || 0,
+    domains: map ? map.size : 0,
+    touched,
+  };
 }
 
 function setBadge(tabId, text, title) {
@@ -107,6 +147,8 @@ async function updateAllBadges() {
 
 function resetTab(tabId) {
   tabBlocked.delete(tabId);
+  tabSeen.delete(tabId);
+  tabDomains.delete(tabId);
   pendingBadges.delete(tabId);
   setBadge(tabId, '', 'Privacy Shield');
 }
@@ -309,7 +351,7 @@ browser.storage.onChanged.addListener((changes) => {
 browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'getTabStats') {
     const tabId = typeof msg.tabId === 'number' ? msg.tabId : sender && sender.tab ? sender.tab.id : -1;
-    sendResponse({ count: tabBlocked.get(tabId) || 0 });
+    sendResponse(tabStats(tabId));
     return true;
   }
   if (msg && msg.type === 'refreshLists') {
@@ -331,6 +373,8 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 browser.tabs.onRemoved.addListener((tabId) => {
   tabBlocked.delete(tabId);
+  tabSeen.delete(tabId);
+  tabDomains.delete(tabId);
   pendingBadges.delete(tabId);
 });
 
@@ -343,17 +387,16 @@ browser.webRequest.onBeforeRequest.addListener(
     const initiatorHost = initiatorHostOf(details);
     if (initiatorHost && isSiteDisabled(initiatorHost)) return {};
     // Only block third-party requests so first-party site resources always load.
-    if (!initiatorHost) return {};
-    if (sameSite(initiatorHost, host)) return {};
-    if (settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script') {
-      recordBlocked(details.url, initiatorHost, details.tabId);
-      return { cancel: true };
+    const thirdParty = !!initiatorHost && !sameSite(initiatorHost, host);
+    let blocked = false;
+    if (thirdParty) {
+      blocked = (settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script') ||
+        isBlockedHost(host);
     }
-    if (isBlockedHost(host)) {
-      recordBlocked(details.url, initiatorHost, details.tabId);
-      return { cancel: true };
-    }
-    return {};
+    noteRequest(details.tabId, host, blocked);
+    if (!blocked) return {};
+    recordBlocked(details.url, initiatorHost, details.tabId);
+    return { cancel: true };
   },
   { urls: ['<all_urls>'] },
   ['blocking']

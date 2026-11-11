@@ -1,42 +1,86 @@
-const versionEl = document.getElementById('version');
-const siteEl = document.getElementById('site');
-const siteState = document.getElementById('siteState');
-const siteToggle = document.getElementById('siteToggle');
-const siteToggleLabel = document.getElementById('siteToggleLabel');
-const siteBlocked = document.getElementById('siteBlocked');
-const totalBlocked = document.getElementById('totalBlocked');
-const rulesEl = document.getElementById('rules');
-const cookiesSwitch = document.getElementById('siteCookies');
-const scriptsSwitch = document.getElementById('siteScripts');
-const cosmeticSwitch = document.getElementById('siteCosmetic');
-const globalToggle = document.getElementById('toggle');
-const picker = document.getElementById('picker');
-const openLog = document.getElementById('openLog');
-const openOptions = document.getElementById('openOptions');
+/*
+ * Privacy Shield popup — layout inspired by uBlock Origin's panel.
+ * Kept: hostname + power switch, per-site module switches, three stats
+ * lines, and a compact tool ribbon. Removed: the dynamic-filtering
+ * firewall matrix, zapper, report links and troubleshooting ribbons.
+ */
+const api = typeof browser !== 'undefined' ? browser : chrome;
+
+const els = {
+  version: document.getElementById('version'),
+  hostSub: document.getElementById('hostSub'),
+  hostDomain: document.getElementById('hostDomain'),
+  siteState: document.getElementById('siteState'),
+  power: document.getElementById('power'),
+  reloadTab: document.getElementById('reloadTab'),
+  pageBlocked: document.getElementById('pageBlocked'),
+  pagePct: document.getElementById('pagePct'),
+  domains: document.getElementById('domains'),
+  totalBlocked: document.getElementById('totalBlocked'),
+  siteCookies: document.getElementById('siteCookies'),
+  siteScripts: document.getElementById('siteScripts'),
+  siteCosmetic: document.getElementById('siteCosmetic'),
+  picker: document.getElementById('picker'),
+  openLog: document.getElementById('openLog'),
+  openOptions: document.getElementById('openOptions'),
+  globalToggle: document.getElementById('toggle'),
+};
 
 let host = '';
 let tabId = -1;
 let state = {};
+let stats = { count: 0, seen: 0, domains: 0, touched: 0 };
+let dirty = false;
 
-versionEl.textContent = `v${browser.runtime.getManifest().version}`;
+els.version.textContent = `v${api.runtime.getManifest().version}`;
 
 async function currentTab() {
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return { host: '', tabId: -1 };
-  let siteHost = '';
-  try { siteHost = new URL(tab.url).hostname; } catch { siteHost = ''; }
-  return { host: siteHost, tabId: typeof tab.id === 'number' ? tab.id : -1 };
+  try {
+    const [tab] = await api.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return { host: '', tabId: -1 };
+    let siteHost = '';
+    try {
+      const url = new URL(tab.url);
+      if (url.protocol === 'http:' || url.protocol === 'https:') siteHost = url.hostname;
+    } catch {
+      siteHost = '';
+    }
+    return { host: siteHost, tabId: typeof tab.id === 'number' ? tab.id : -1 };
+  } catch {
+    return { host: '', tabId: -1 };
+  }
 }
 
-async function pageBlockedCount() {
-  if (tabId < 0) return (state.siteStats && state.siteStats[host]) || 0;
-  try {
-    const res = await browser.runtime.sendMessage({ type: 'getTabStats', tabId });
-    if (res && typeof res.count === 'number') return res.count;
-  } catch {
-    // Background unavailable; fall back to the stored per-site counter.
+async function fetchStats() {
+  if (tabId >= 0) {
+    try {
+      const res = await api.runtime.sendMessage({ type: 'getTabStats', tabId });
+      if (res && typeof res === 'object') {
+        stats = {
+          count: Number(res.count) || 0,
+          seen: Number(res.seen) || 0,
+          domains: Number(res.domains) || 0,
+          touched: Number(res.touched) || 0,
+        };
+        return stats;
+      }
+    } catch {
+      // Background unavailable; fall back to the stored per-site counter.
+    }
   }
-  return (state.siteStats && state.siteStats[host]) || 0;
+  stats = {
+    count: (state.siteStats && state.siteStats[host]) || 0,
+    seen: 0,
+    domains: 0,
+    touched: 0,
+  };
+  return stats;
+}
+
+function splitHost(value) {
+  const dot = value.indexOf('.');
+  if (dot < 0) return { sub: '', dom: value };
+  return { sub: value.slice(0, dot + 1), dom: value.slice(dot + 1) };
 }
 
 function effective(site, key, fallback) {
@@ -44,15 +88,12 @@ function effective(site, key, fallback) {
 }
 
 function setSwitch(button, value) {
-  button.setAttribute('aria-checked', String(value === true));
+  const on = value === true;
+  button.setAttribute('aria-checked', String(on));
+  button.dataset.on = String(on);
 }
 
-async function load() {
-  state = await browser.storage.local.get([
-    'enabled', 'blocked', 'disabledSites', 'siteSettings', 'siteStats',
-    'activeRuleCount', 'dnrRuleCount', 'cookieProtection', 'scriptControl',
-  ]);
-
+function render() {
   const enabled = state.enabled !== false;
   const disabledSites = state.disabledSites || [];
   const siteSettings = state.siteSettings || {};
@@ -60,63 +101,116 @@ async function load() {
   const cookieProtection = state.cookieProtection !== false;
   const scriptControl = state.scriptControl === true;
 
-  const protectionOn = !!host && !disabledSites.includes(host) && (!site || site.enabled !== false);
-  const active = enabled && protectionOn;
+  const siteOn = !!host && !disabledSites.includes(host) && (!site || site.enabled !== false);
+  const active = enabled && siteOn;
 
-  siteEl.textContent = host || 'Internal page';
-  siteState.textContent = !host
+  const { sub, dom } = splitHost(host);
+  els.hostSub.textContent = sub;
+  els.hostDomain.textContent = dom || 'Internal page';
+
+  els.siteState.textContent = !host
     ? 'No site controls available'
     : !enabled
       ? 'Global protection is off'
-      : protectionOn
+      : siteOn
         ? 'Protection active on this site'
         : 'Paused on this site';
-  siteState.classList.toggle('active', active);
+  els.siteState.dataset.state = active ? 'on' : 'off';
 
-  siteBlocked.textContent = (await pageBlockedCount()).toLocaleString();
-  totalBlocked.textContent = (state.blocked || 0).toLocaleString();
-  rulesEl.textContent = (state.activeRuleCount || 0).toLocaleString();
+  els.power.dataset.on = String(active);
+  els.power.setAttribute('aria-checked', String(active));
+  els.power.disabled = !host;
+  els.power.title = !host
+    ? 'No site controls available'
+    : active
+      ? 'Turn off protection for this site'
+      : 'Turn on protection for this site';
+  els.power.setAttribute('aria-label', els.power.title);
 
-  siteToggle.dataset.on = String(active);
-  siteToggle.setAttribute('aria-pressed', String(active));
-  siteToggleLabel.textContent = active ? 'On' : 'Off';
-  siteToggle.disabled = !host;
+  const blocked = stats.count;
+  const total = Math.max(stats.seen, blocked);
+  const percent = total > 0 ? Math.min(100, Math.round((blocked * 100) / total)) : 0;
+  els.pageBlocked.textContent = blocked.toLocaleString();
+  els.pagePct.textContent = total > 0 ? ` (${percent}%)` : '';
+  els.domains.textContent = stats.domains > 0 ? `${stats.touched} of ${stats.domains}` : '0';
+  els.totalBlocked.textContent = (state.blocked || 0).toLocaleString();
 
-  setSwitch(cookiesSwitch, effective(site, 'cookieProtection', cookieProtection));
-  setSwitch(scriptsSwitch, effective(site, 'scriptControl', scriptControl));
-  setSwitch(cosmeticSwitch, effective(site, 'cosmeticFiltering', true));
-  setSwitch(globalToggle, enabled);
+  setSwitch(els.siteCookies, effective(site, 'cookieProtection', cookieProtection));
+  setSwitch(els.siteScripts, effective(site, 'scriptControl', scriptControl));
+  setSwitch(els.siteCosmetic, effective(site, 'cosmeticFiltering', true));
+  setSwitch(els.globalToggle, enabled);
 
-  for (const button of [cookiesSwitch, scriptsSwitch, cosmeticSwitch]) {
+  for (const button of [els.siteCookies, els.siteScripts, els.siteCosmetic, els.picker]) {
     button.disabled = !host;
   }
-  picker.disabled = !host;
+  els.reloadTab.classList.toggle('visible', dirty && tabId >= 0);
+}
+
+async function load() {
+  state = await api.storage.local.get([
+    'enabled', 'blocked', 'disabledSites', 'siteSettings', 'siteStats',
+    'activeRuleCount', 'dnrRuleCount', 'cookieProtection', 'scriptControl',
+  ]);
+  await fetchStats();
+  render();
+}
+
+async function refreshStats() {
+  const fresh = await api.storage.local.get(['blocked', 'siteStats']);
+  state = { ...state, ...fresh };
+  await fetchStats();
+  render();
+}
+
+function markDirty() {
+  dirty = true;
+  els.reloadTab.classList.add('visible');
 }
 
 async function saveSiteSettings(siteSettings) {
-  if (host && !siteSettings[host]) delete siteSettings[host];
-  await browser.storage.local.set({ siteSettings });
+  if (host && siteSettings[host] && Object.keys(siteSettings[host]).length === 0) {
+    delete siteSettings[host];
+  }
+  await api.storage.local.set({ siteSettings });
   await load();
 }
 
-siteToggle.addEventListener('click', async () => {
+els.power.addEventListener('click', async () => {
   if (!host) return;
-  const { disabledSites = [], siteSettings = {} } = await browser.storage.local.get(['disabledSites', 'siteSettings']);
-  const next = protectionOn()
-    ? [...disabledSites, host]
-    : disabledSites.filter((h) => h !== host);
-  if (siteSettings[host]) delete siteSettings[host].enabled;
-  await browser.storage.local.set({ disabledSites: next, siteSettings });
+  const stored = await api.storage.local.get(['enabled', 'disabledSites', 'siteSettings']);
+  const enabled = stored.enabled !== false;
+  const disabledSites = new Set(stored.disabledSites || []);
+  const siteSettings = stored.siteSettings || {};
+  const site = siteSettings[host] || {};
+  const siteOn = !disabledSites.has(host) && site.enabled !== false;
+
+  // When global protection is off, the first click turns everything back on
+  // for this site instead of silently toggling a paused site.
+  if (!enabled) {
+    await api.storage.local.set({ enabled: true });
+  }
+
+  if (enabled && siteOn) {
+    disabledSites.add(host);
+  } else {
+    disabledSites.delete(host);
+  }
+  if (siteSettings[host]) {
+    delete siteSettings[host].enabled;
+    if (Object.keys(siteSettings[host]).length === 0) delete siteSettings[host];
+  }
+
+  await api.storage.local.set({
+    disabledSites: Array.from(disabledSites),
+    siteSettings,
+  });
+  markDirty();
   await load();
 });
 
-function protectionOn() {
-  return siteToggle.dataset.on === 'true';
-}
-
 async function toggleModule(key, fallback) {
   if (!host) return;
-  const { siteSettings = {} } = await browser.storage.local.get('siteSettings');
+  const { siteSettings = {} } = await api.storage.local.get('siteSettings');
   const site = { ...(siteSettings[host] || {}) };
   const explicit = typeof site[key] === 'boolean';
   const current = explicit ? site[key] : fallback;
@@ -128,44 +222,71 @@ async function toggleModule(key, fallback) {
     site[key] = next;
   }
   siteSettings[host] = site;
+  markDirty();
   await saveSiteSettings(siteSettings);
 }
 
-cookiesSwitch.addEventListener('click', async () => {
-  const { cookieProtection = true } = await browser.storage.local.get('cookieProtection');
+els.siteCookies.addEventListener('click', async () => {
+  const { cookieProtection = true } = await api.storage.local.get('cookieProtection');
   toggleModule('cookieProtection', cookieProtection);
 });
 
-scriptsSwitch.addEventListener('click', async () => {
-  const { scriptControl = false } = await browser.storage.local.get('scriptControl');
+els.siteScripts.addEventListener('click', async () => {
+  const { scriptControl = false } = await api.storage.local.get('scriptControl');
   toggleModule('scriptControl', scriptControl);
 });
 
-cosmeticSwitch.addEventListener('click', () => toggleModule('cosmeticFiltering', true));
+els.siteCosmetic.addEventListener('click', () => toggleModule('cosmeticFiltering', true));
 
-globalToggle.addEventListener('click', async () => {
-  const { enabled = true } = await browser.storage.local.get('enabled');
-  await browser.storage.local.set({ enabled: !enabled });
+els.globalToggle.addEventListener('click', async () => {
+  const { enabled = true } = await api.storage.local.get('enabled');
+  await api.storage.local.set({ enabled: !enabled });
+  markDirty();
   await load();
 });
 
-picker.addEventListener('click', async () => {
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (tab && tab.id) {
-    browser.tabs.sendMessage(tab.id, { type: 'startPicker' });
-    window.close();
+els.reloadTab.addEventListener('click', async () => {
+  if (tabId < 0) return;
+  try {
+    await api.tabs.reload(tabId);
+  } catch {
+    // The tab may have closed while the popup was open.
   }
+  window.close();
+});
+
+els.picker.addEventListener('click', async () => {
+  if (tabId < 0) return;
+  try {
+    await api.tabs.sendMessage(tabId, { type: 'startPicker' });
+  } catch {
+    // Content script unavailable on this page.
+  }
+  window.close();
 });
 
 function openOptionsPage(hash) {
-  browser.tabs.create({ url: browser.runtime.getURL(`options.html${hash || ''}`) });
+  api.tabs.create({ url: api.runtime.getURL(`options.html${hash || ''}`) });
   window.close();
 }
 
-openLog.addEventListener('click', () => openOptionsPage('#request-log'));
-openOptions.addEventListener('click', () => openOptionsPage());
+els.openLog.addEventListener('click', () => openOptionsPage('#request-log'));
+els.openOptions.addEventListener('click', () => openOptionsPage());
 
-browser.storage.onChanged.addListener(() => load());
+api.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes.blocked || changes.siteStats) {
+    refreshStats();
+    return;
+  }
+  if (
+    changes.enabled || changes.disabledSites || changes.siteSettings ||
+    changes.cookieProtection || changes.scriptControl ||
+    changes.activeRuleCount || changes.dnrRuleCount
+  ) {
+    load();
+  }
+});
 
 (async () => {
   const tab = await currentTab();
