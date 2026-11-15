@@ -1,23 +1,20 @@
 /*
  * Privacy Shield popup — layout inspired by uBlock Origin's panel.
- * Kept: hostname + power switch, per-site module switches, three stats
- * lines, and a compact tool ribbon. Removed: the dynamic-filtering
- * firewall matrix, zapper, report links and troubleshooting ribbons.
+ * Kept: hostname + power switch, one page-stat line, per-site module
+ * switches, a compact tool ribbon and the global protection toggle.
+ * Removed: the status caption line, the extra statistics lines, the
+ * version row, the dynamic-filtering firewall matrix, zapper, report
+ * links and troubleshooting ribbons.
  */
 const api = typeof browser !== 'undefined' ? browser : chrome;
 
 const els = {
-  version: document.getElementById('version'),
   hostSub: document.getElementById('hostSub'),
   hostDomain: document.getElementById('hostDomain'),
-  siteState: document.getElementById('siteState'),
   power: document.getElementById('power'),
   reloadTab: document.getElementById('reloadTab'),
   pageBlocked: document.getElementById('pageBlocked'),
   pagePct: document.getElementById('pagePct'),
-  domains: document.getElementById('domains'),
-  pageHidden: document.getElementById('pageHidden'),
-  totalBlocked: document.getElementById('totalBlocked'),
   siteCookies: document.getElementById('siteCookies'),
   siteScripts: document.getElementById('siteScripts'),
   siteCosmetic: document.getElementById('siteCosmetic'),
@@ -30,10 +27,8 @@ const els = {
 let host = '';
 let tabId = -1;
 let state = {};
-let stats = { count: 0, seen: 0, domains: 0, touched: 0, hidden: 0 };
+let stats = { count: 0, seen: 0 };
 let dirty = false;
-
-els.version.textContent = `v${api.runtime.getManifest().version}`;
 
 async function currentTab() {
   try {
@@ -60,9 +55,6 @@ async function fetchStats() {
         stats = {
           count: Number(res.count) || 0,
           seen: Number(res.seen) || 0,
-          domains: Number(res.domains) || 0,
-          touched: Number(res.touched) || 0,
-          hidden: Number(res.hidden) || 0,
         };
         return stats;
       }
@@ -73,9 +65,6 @@ async function fetchStats() {
   stats = {
     count: (state.siteStats && state.siteStats[host]) || 0,
     seen: 0,
-    domains: 0,
-    touched: 0,
-    hidden: 0,
   };
   return stats;
 }
@@ -111,15 +100,6 @@ function render() {
   els.hostSub.textContent = sub;
   els.hostDomain.textContent = dom || 'Internal page';
 
-  els.siteState.textContent = !host
-    ? 'No site controls available'
-    : !enabled
-      ? 'Global protection is off'
-      : siteOn
-        ? 'Protection active on this site'
-        : 'Paused on this site';
-  els.siteState.dataset.state = active ? 'on' : 'off';
-
   els.power.dataset.on = String(active);
   els.power.setAttribute('aria-checked', String(active));
   els.power.disabled = !host;
@@ -135,9 +115,6 @@ function render() {
   const percent = total > 0 ? Math.min(100, Math.round((blocked * 100) / total)) : 0;
   els.pageBlocked.textContent = blocked.toLocaleString();
   els.pagePct.textContent = total > 0 ? ` (${percent}%)` : '';
-  els.domains.textContent = stats.domains > 0 ? `${stats.touched} of ${stats.domains}` : '0';
-  els.pageHidden.textContent = stats.hidden.toLocaleString();
-  els.totalBlocked.textContent = (state.blocked || 0).toLocaleString();
 
   setSwitch(els.siteCookies, effective(site, 'cookieProtection', cookieProtection));
   setSwitch(els.siteScripts, effective(site, 'scriptControl', scriptControl));
@@ -152,15 +129,15 @@ function render() {
 
 async function load() {
   state = await api.storage.local.get([
-    'enabled', 'blocked', 'disabledSites', 'siteSettings', 'siteStats',
-    'activeRuleCount', 'dnrRuleCount', 'cookieProtection', 'scriptControl',
+    'enabled', 'disabledSites', 'siteSettings', 'siteStats',
+    'cookieProtection', 'scriptControl',
   ]);
   await fetchStats();
   render();
 }
 
 async function refreshStats() {
-  const fresh = await api.storage.local.get(['blocked', 'siteStats']);
+  const fresh = await api.storage.local.get(['siteStats']);
   state = { ...state, ...fresh };
   await fetchStats();
   render();
@@ -279,14 +256,13 @@ els.openOptions.addEventListener('click', () => openOptionsPage());
 
 api.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.blocked || changes.siteStats) {
+  if (changes.siteStats) {
     refreshStats();
     return;
   }
   if (
     changes.enabled || changes.disabledSites || changes.siteSettings ||
-    changes.cookieProtection || changes.scriptControl ||
-    changes.activeRuleCount || changes.dnrRuleCount
+    changes.cookieProtection || changes.scriptControl
   ) {
     load();
   }

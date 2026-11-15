@@ -47,13 +47,6 @@
       color: var(--muted);
     }
     #hostname b { color: var(--text); font-weight: 650; }
-    #siteState {
-      margin-top: 2px;
-      text-align: center;
-      font-size: 10.5px;
-      color: var(--muted);
-    }
-    #siteState[data-state="on"] { color: var(--accent); }
 
     #stickyTools {
       display: grid;
@@ -100,7 +93,7 @@
     /* --- Stats, uBO style: label above value --- */
     #basicStats {
       margin: 0 12px;
-      padding: 10px 0 6px;
+      padding: 10px 0 8px;
       display: grid;
       justify-items: center;
     }
@@ -198,22 +191,11 @@
     .switch[aria-checked="true"] { background: var(--accent-soft); border-color: rgba(45, 212, 191, 0.45); }
     .switch[aria-checked="true"] .knob { transform: translateX(16px); background: var(--accent); box-shadow: 0 0 8px rgba(45, 212, 191, 0.45); }
     .switch:disabled { opacity: 0.45; cursor: default; }
-
-    #versionRow {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding-top: 9px;
-      border-top: 1px solid var(--border-soft);
-      font-size: 11.5px;
-      color: var(--muted);
-    }
   </style>
 </head>
 <body>
   <header id="sticky">
     <div id="hostname"><span id="hostSub"></span><b id="hostDomain">Internal page</b></div>
-    <div id="siteState">Checking…</div>
     <div id="stickyTools">
       <button id="reloadTab" title="Reload the page to apply changes" aria-label="Reload the page to apply changes">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -233,12 +215,6 @@
   <section id="basicStats" aria-label="Statistics">
     <span class="stat-label">Blocked on this page</span>
     <span class="stat-value"><span id="pageBlocked">0</span><span class="pct" id="pagePct"></span></span>
-    <span class="stat-label">Domains connected</span>
-    <span class="stat-value" id="domains">0</span>
-    <span class="stat-label">Hidden here (cosmetic)</span>
-    <span class="stat-value" id="pageHidden">0</span>
-    <span class="stat-label">Blocked since install</span>
-    <span class="stat-value" id="totalBlocked">0</span>
   </section>
 
   <div id="extraTools" class="toolRibbon" aria-label="Site controls">
@@ -322,10 +298,6 @@
       <button class="switch" id="toggle" role="switch" aria-checked="true" aria-label="Toggle global protection">
         <span class="knob"></span>
       </button>
-    </div>
-    <div id="versionRow">
-      <span>Version</span>
-      <span id="version">—</span>
     </div>
   </footer>
 
