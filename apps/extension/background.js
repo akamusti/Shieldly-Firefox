@@ -642,6 +642,16 @@ browser.storage.onChanged.addListener((changes) => {
 });
 
 browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === 'contextTargetReady') {
+    // The content script saw a right-click: remember which frame holds the
+    // element so the menu click can be routed to that frame.
+    const tabId = sender && sender.tab && typeof sender.tab.id === 'number' ? sender.tab.id : -1;
+    if (tabId >= 0) {
+      const frameId = sender && typeof sender.frameId === 'number' ? sender.frameId : 0;
+      contextTargets.set(tabId, { frameId, at: Date.now() });
+    }
+    return undefined;
+  }
   if (msg && msg.type === 'cosmeticStats') {
     const tabId = sender && sender.tab && typeof sender.tab.id === 'number' ? sender.tab.id : -1;
     noteHidden(tabId, msg.hidden);
@@ -658,6 +668,88 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 });
+
+// --- context menu: block element --------------------------------------------
+// The browser context menu offers "Privacy Shield → Block element", the same
+// entry uBlock Origin and AdGuard show. The browser does not report the
+// pointer position for a menu click, so the content script remembers the
+// element the user right-clicked and reports the frame it lives in.
+
+const CONTEXT_MENU_ROOT = 'privacy-shield-root';
+const CONTEXT_MENU_BLOCK = 'privacy-shield-block-element';
+const CONTEXT_MENU_PATTERNS = ['http://*/*', 'https://*/*'];
+// tabId -> { frameId, at } of the frame that last saw a right-click.
+const contextTargets = new Map();
+
+let contextMenusPromise = null;
+
+// Creates the menu item or, when it already exists, refreshes its title.
+// Reloading the add-on drops the items, so "create if missing" is the
+// default path.
+async function upsertContextMenu(properties) {
+  try {
+    await browser.menus.update(properties.id, { title: properties.title });
+  } catch {
+    await browser.menus.create(properties);
+  }
+}
+
+function ensureContextMenus() {
+  if (!browser.menus) return Promise.resolve();
+  if (!contextMenusPromise) {
+    contextMenusPromise = (async () => {
+      try {
+        await upsertContextMenu({
+          id: CONTEXT_MENU_ROOT,
+          title: 'Privacy Shield',
+          contexts: ['all'],
+          documentUrlPatterns: CONTEXT_MENU_PATTERNS,
+        });
+        await upsertContextMenu({
+          id: CONTEXT_MENU_BLOCK,
+          parentId: CONTEXT_MENU_ROOT,
+          title: 'Block element',
+          contexts: ['all'],
+        });
+      } catch (e) {
+        console.warn('Context menu setup failed', e);
+      }
+    })();
+  }
+  return contextMenusPromise;
+}
+
+// Asks the frame that saw the right-click to block that element. When that
+// frame is gone the element picker takes over so the user can still choose.
+async function requestBlockElement(tabId) {
+  const target = contextTargets.get(tabId);
+  const message = { type: 'blockElement' };
+  if (target && typeof target.frameId === 'number') {
+    try {
+      const res = await browser.tabs.sendMessage(tabId, message, { frameId: target.frameId });
+      if (res && res.ok) return true;
+      if (res && res.reason === 'disabled') return false;
+    } catch {
+      // The frame is gone (navigation or reload).
+    }
+  }
+  try {
+    await browser.tabs.sendMessage(tabId, { type: 'startPicker' }, { frameId: 0 });
+  } catch {
+    // The page has no content script at all.
+  }
+  return false;
+}
+
+if (browser.menus && browser.menus.onClicked) {
+  browser.menus.onClicked.addListener((info, tab) => {
+    if (!info || info.menuItemId !== CONTEXT_MENU_BLOCK) return;
+    if (!tab || typeof tab.id !== 'number') return;
+    requestBlockElement(tab.id);
+  });
+}
+
+ensureContextMenus();
 
 browser.tabs.onActivated.addListener(({ tabId }) => scheduleBadge(tabId));
 
@@ -678,6 +770,7 @@ browser.tabs.onRemoved.addListener((tabId) => {
   pendingBlockedUrls.delete(tabId);
   tabDomains.delete(tabId);
   pendingBadges.delete(tabId);
+  contextTargets.delete(tabId);
 });
 
 browser.webRequest.onBeforeRequest.addListener(

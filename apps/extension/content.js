@@ -16,6 +16,11 @@
  *
  * Hiding is cosmetic only: it removes no request, so the popup reports it
  * separately from the blocked counter.
+ *
+ * The script also blocks single elements: the browser context menu offers
+ * "Privacy Shield → Block element", and the element under the pointer is
+ * turned into a site-specific cosmetic rule (`example.com##.ad`). The popup
+ * offers the same action through the element picker.
  */
 (function () {
   const api = typeof browser !== 'undefined' ? browser : chrome;
@@ -174,6 +179,150 @@
     return lines.join('\n');
   }
 
+  // --- user rules (blocked elements) ---------------------------------------
+  //
+  // A blocked element is stored as a site-specific cosmetic rule
+  // (`example.com##.ad`), the same format the filter lists use.
+
+  function ruleFor(selector) {
+    return `${host}##${selector}`;
+  }
+
+  async function addCustomRule(rule) {
+    const { customCosmetic = [] } = await api.storage.local.get('customCosmetic');
+    if (customCosmetic.includes(rule)) return false;
+    await api.storage.local.set({ customCosmetic: [...customCosmetic, rule] });
+    return true;
+  }
+
+  async function removeCustomRule(rule) {
+    const { customCosmetic = [] } = await api.storage.local.get('customCosmetic');
+    if (!customCosmetic.includes(rule)) return false;
+    await api.storage.local.set({
+      customCosmetic: customCosmetic.filter((entry) => entry !== rule),
+    });
+    return true;
+  }
+
+  // The element the user right-clicked. Chrome does not tell the background
+  // where the pointer was, so the content script remembers it itself and only
+  // reports which frame it belongs to.
+  let contextTarget = null;
+
+  function elementFromEvent(event) {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    const first = path && path.length ? path[0] : event.target;
+    if (first && first.nodeType === 1) return first;
+    return event.target && event.target.nodeType === 1 ? event.target : null;
+  }
+
+  document.addEventListener('contextmenu', (event) => {
+    const element = elementFromEvent(event);
+    if (!element) return;
+    contextTarget = element;
+    try {
+      const pending = api.runtime.sendMessage({ type: 'contextTargetReady' });
+      if (pending && typeof pending.catch === 'function') pending.catch(() => {});
+    } catch {
+      // No background page; the picker still works.
+    }
+  }, true);
+
+  // Blocks the element the user right-clicked and stores the rule so the
+  // element stays hidden on the next visit.
+  async function blockElement() {
+    if (stateLoaded && !state.active) {
+      showToast('Protection is paused on this site');
+      return { ok: false, reason: 'disabled' };
+    }
+    const element = contextTarget;
+    if (!element || !element.isConnected) return { ok: false, reason: 'no-target' };
+    const selector = makeSelector(element);
+    if (!selector) return { ok: false, reason: 'no-selector' };
+    const rule = ruleFor(selector);
+    await addCustomRule(rule);
+    if (!state.specific.includes(selector)) state.specific.push(selector);
+    render(postDomDone);
+    showToast('Element blocked', 'Undo', () => {
+      removeCustomRule(rule);
+    });
+    return { ok: true, selector };
+  }
+
+  // --- toast ----------------------------------------------------------------
+
+  const TOAST_ID = 'privacy-shield-toast';
+  let toastTimer = null;
+
+  function setStyles(element, styles) {
+    for (const [property, value] of Object.entries(styles)) {
+      element.style.setProperty(property, value, 'important');
+    }
+  }
+
+  function removeToast() {
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+      toastTimer = null;
+    }
+    const existing = document.getElementById(TOAST_ID);
+    if (existing) existing.remove();
+  }
+
+  function showToast(message, actionLabel, onAction) {
+    removeToast();
+    if (!document.body) return;
+    const toast = document.createElement('div');
+    toast.id = TOAST_ID;
+    toast.setAttribute('role', 'status');
+    setStyles(toast, {
+      position: 'fixed',
+      right: '16px',
+      bottom: '16px',
+      'z-index': '2147483647',
+      display: 'flex',
+      'align-items': 'center',
+      gap: '12px',
+      'max-width': '340px',
+      padding: '10px 12px',
+      'border-radius': '10px',
+      background: '#121924',
+      color: '#e6e6e6',
+      border: '1px solid #243044',
+      'font-family': 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+      'font-size': '13px',
+      'line-height': '1.4',
+      'box-shadow': '0 8px 24px rgba(0, 0, 0, 0.35)',
+    });
+
+    const text = document.createElement('span');
+    text.textContent = message;
+    toast.appendChild(text);
+
+    if (actionLabel && typeof onAction === 'function') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = actionLabel;
+      setStyles(button, {
+        background: 'transparent',
+        border: '1px solid #2dd4bf',
+        color: '#2dd4bf',
+        'border-radius': '6px',
+        padding: '4px 10px',
+        cursor: 'pointer',
+        'font-size': '12px',
+      });
+      button.addEventListener('click', () => {
+        removeToast();
+        onAction();
+      });
+      toast.appendChild(button);
+    }
+
+    document.body.appendChild(toast);
+    toastTimer = setTimeout(removeToast, 4500);
+  }
+
   // --- state ---------------------------------------------------------------
 
   const state = {
@@ -195,6 +344,8 @@
   let lastCss = '';
   let postDomDone = false;
   let countTimer = null;
+  // True once the first load finished; before that the state is still unknown.
+  let stateLoaded = false;
 
   function appliedSelectors(includeGeneric) {
     const out = [];
@@ -434,6 +585,7 @@
     state.generichide = generichide;
     state.cachedGeneric = cacheGet(caches.generic, host);
     state.collapsed = cacheGet(caches.collapse, host);
+    stateLoaded = true;
   }
 
   async function apply() {
@@ -489,31 +641,187 @@
     }
   });
 
-  api.runtime.onMessage.addListener((msg) => {
+  api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.type === 'blockedResources') {
       onBlockedResources(msg.urls);
-      return;
+      return undefined;
     }
     if (msg && msg.type === 'startPicker') {
-      picking = true;
-      document.addEventListener('mouseover', onOver, true);
-      document.addEventListener('click', onClick, true);
+      startPicker();
+      return undefined;
     }
+    if (msg && msg.type === 'blockElement') {
+      blockElement().then(
+        (result) => sendResponse(result),
+        () => sendResponse({ ok: false, reason: 'error' }),
+      );
+      return true;
+    }
+    return undefined;
   });
 
   // --- element picker ------------------------------------------------------
+  //
+  // The selector generator mirrors buildElementSelector() in
+  // @privacy-shield/cosmetic-filter (extensions ship plain JS, so the logic
+  // is mirrored instead of imported).
 
-  function selectorFor(el) {
-    if (el.id) return `#${CSS.escape(el.id)}`;
-    const cls = Array.from(el.classList).filter(Boolean).slice(0, 2);
-    if (cls.length) return `${el.tagName.toLowerCase()}.${cls.map(CSS.escape).join('.')}`;
-    let path = el.tagName.toLowerCase();
-    const parent = el.parentElement;
-    if (parent) {
-      const siblings = Array.from(parent.children).filter((c) => c.tagName === el.tagName);
-      if (siblings.length > 1) path += `:nth-of-type(${siblings.indexOf(el) + 1})`;
+  function escapeCssIdentifier(value) {
+    if (value === '') return '';
+    let result = '';
+    for (let index = 0; index < value.length; index++) {
+      const code = value.charCodeAt(index);
+      if (code === 0x0000) {
+        result += '\uFFFD';
+        continue;
+      }
+      if ((code >= 0x0001 && code <= 0x001f) || code === 0x007f) {
+        result += `\\${code.toString(16)} `;
+        continue;
+      }
+      if (index === 0 && code >= 0x0030 && code <= 0x0039) {
+        result += `\\${code.toString(16)} `;
+        continue;
+      }
+      if (index === 1 && code >= 0x0030 && code <= 0x0039 && value.charCodeAt(0) === 0x002d) {
+        result += `\\${code.toString(16)} `;
+        continue;
+      }
+      if (index === 0 && code === 0x002d && value.length === 1) {
+        result += '\\-';
+        continue;
+      }
+      if (
+        code >= 0x0080 ||
+        code === 0x002d ||
+        code === 0x005f ||
+        (code >= 0x0030 && code <= 0x0039) ||
+        (code >= 0x0041 && code <= 0x005a) ||
+        (code >= 0x0061 && code <= 0x007a)
+      ) {
+        result += value[index];
+        continue;
+      }
+      result += `\\${value[index]}`;
     }
-    return path;
+    return result;
+  }
+
+  // Generated class names (css-1x2y3z, sc-AbCdEf12) change with every build,
+  // so a rule built on them would stop working after the next deploy.
+  function isVolatileClass(value) {
+    if (!value) return true;
+    if (/^[a-z]{1,3}-[0-9a-z]{4,}$/i.test(value) && /\d/.test(value)) return true;
+    if (/^[a-z]+[0-9a-f]{8,}$/i.test(value)) return true;
+    if (/\d{7,}/.test(value)) return true;
+    if (/^[A-Za-z]{2,}[0-9]{3,}$/.test(value)) return true;
+    return false;
+  }
+
+  const STABLE_ATTRIBUTES = ['data-testid', 'data-test', 'data-ad', 'data-slot', 'name', 'role', 'type'];
+  const MAX_ATTRIBUTE_VALUE_LENGTH = 64;
+  const MAX_SELECTOR_DEPTH = 8;
+
+  function attributeCandidates(snapshot) {
+    const attributes = snapshot.attributes || {};
+    const candidates = [];
+    for (const name of STABLE_ATTRIBUTES) {
+      const value = attributes[name];
+      if (typeof value === 'string' && value !== '' && value.length <= MAX_ATTRIBUTE_VALUE_LENGTH) {
+        candidates.push([name, value]);
+      }
+    }
+    for (const [name, value] of Object.entries(attributes)) {
+      if (!name.startsWith('data-')) continue;
+      if (candidates.some(([existing]) => existing === name)) continue;
+      if (typeof value !== 'string' || value === '' || value.length > MAX_ATTRIBUTE_VALUE_LENGTH) continue;
+      candidates.push([name, value]);
+    }
+    return candidates;
+  }
+
+  function snapshotFor(el, depth) {
+    const parent = el.parentElement;
+    let nthOfType = 0;
+    let sameTagSiblings = 0;
+    if (parent) {
+      const siblings = Array.from(parent.children).filter((child) => child.tagName === el.tagName);
+      sameTagSiblings = siblings.length;
+      nthOfType = siblings.indexOf(el) + 1;
+    }
+    const attributes = {};
+    for (const attr of el.attributes) attributes[attr.name] = attr.value;
+    return {
+      tag: el.tagName.toLowerCase(),
+      id: el.id || null,
+      classes: Array.from(el.classList),
+      attributes,
+      nthOfType,
+      sameTagSiblings,
+      parent: depth < MAX_SELECTOR_DEPTH && parent ? snapshotFor(parent, depth + 1) : null,
+    };
+  }
+
+  function matchCount(selector) {
+    try {
+      return document.querySelectorAll(selector).length;
+    } catch {
+      // The browser rejected the selector.
+      return 0;
+    }
+  }
+
+  // Builds the most specific selector that still matches exactly one element:
+  // #id, then tag.classes, then a stable attribute, then a parent path.
+  function buildElementSelector(snapshot) {
+    if (!snapshot || !snapshot.tag) return '';
+
+    if (snapshot.id) {
+      const selector = `#${escapeCssIdentifier(snapshot.id)}`;
+      if (matchCount(selector) === 1) return selector;
+    }
+
+    const classes = (snapshot.classes || []).filter((name) => name && !isVolatileClass(name));
+    for (let take = Math.min(classes.length, 3); take >= 1; take--) {
+      const combo = classes.slice(0, take).map(escapeCssIdentifier).join('.');
+      const selector = `${snapshot.tag}.${combo}`;
+      if (matchCount(selector) === 1) return selector;
+    }
+
+    for (const [name, value] of attributeCandidates(snapshot)) {
+      const selector = `${snapshot.tag}[${name}="${cssAttributeValue(value)}"]`;
+      if (matchCount(selector) === 1) return selector;
+    }
+
+    const segments = [];
+    let current = snapshot;
+    let depth = 0;
+    while (current && depth <= MAX_SELECTOR_DEPTH) {
+      let segment = current.tag;
+      const total = current.sameTagSiblings || 0;
+      const nth = current.nthOfType || 0;
+      if (nth && total > 1) segment = `${current.tag}:nth-of-type(${nth})`;
+      if (depth > 0 && current.id) {
+        const idSelector = `#${escapeCssIdentifier(current.id)}`;
+        if (matchCount(idSelector) === 1) {
+          segments.push(idSelector);
+          break;
+        }
+      }
+      segments.push(segment);
+      current = current.parent || null;
+      depth++;
+    }
+
+    for (let length = 1; length <= segments.length; length++) {
+      const candidate = segments.slice(0, length).join(' > ');
+      if (matchCount(candidate) === 1) return candidate;
+    }
+    return segments[0] || snapshot.tag;
+  }
+
+  function makeSelector(el) {
+    return buildElementSelector(snapshotFor(el, 0));
   }
 
   function stopPicker() {
@@ -524,6 +832,22 @@
     }
     document.removeEventListener('mouseover', onOver, true);
     document.removeEventListener('click', onClick, true);
+    document.removeEventListener('keydown', onKey, true);
+  }
+
+  function startPicker() {
+    picking = true;
+    document.addEventListener('mouseover', onOver, true);
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('keydown', onKey, true);
+  }
+
+  function onKey(e) {
+    if (!picking) return;
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    stopPicker();
+    showToast('Element picker cancelled');
   }
 
   function onOver(e) {
@@ -545,11 +869,15 @@
     if (!picking) return;
     e.preventDefault();
     e.stopPropagation();
-    const selector = selectorFor(e.target);
-    const { customCosmetic = [] } = await api.storage.local.get('customCosmetic');
-    await api.storage.local.set({
-      customCosmetic: Array.from(new Set([...customCosmetic, `${host}##${selector}`])),
-    });
+    const selector = makeSelector(e.target);
     stopPicker();
+    if (!selector) return;
+    const rule = ruleFor(selector);
+    await addCustomRule(rule);
+    if (!state.specific.includes(selector)) state.specific.push(selector);
+    render(postDomDone);
+    showToast('Element blocked', 'Undo', () => {
+      removeCustomRule(rule);
+    });
   }
 })();

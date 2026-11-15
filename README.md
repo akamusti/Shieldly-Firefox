@@ -15,6 +15,10 @@ privacy & adblock engine. Depends on `privacy-shield-core`
     blocked requests (tracked internally, not shown in the popup)
   - v0.7.0: remove tracking query parameters on navigations and fetch/XHR,
     including scoped and regex rules, while preserving authentication parameters
+  - v0.8.0: block single elements from the browser context menu
+    ("Privacy Shield → Block element"), with a uniqueness-checked selector
+    generator, an undo toast and a "Blocked elements" list in the settings
+    page
 
 See `../privacy-shield-core/ROADMAP.md`.
 

@@ -30,6 +30,7 @@ const refreshLists = document.getElementById('refreshLists');
 const listMessage = document.getElementById('listMessage');
 const logEl = document.getElementById('log');
 const clearLog = document.getElementById('clearLog');
+const blockedElements = document.getElementById('blockedElements');
 
 function formatTime(ts) {
   if (!ts) return 'never';
@@ -47,6 +48,7 @@ async function getState() {
   return browser.storage.local.get([
     'filterLists', 'customFilterLists', 'filterListStatus', 'customRulesText',
     'cookieProtection', 'scriptControl', 'siteSettings', 'disabledSites', 'siteStats', 'requestLog',
+    'customCosmetic',
   ]);
 }
 
@@ -57,6 +59,7 @@ async function load() {
   customRules.value = state.customRulesText || '';
   renderLists(state);
   renderSites(state);
+  renderBlockedElements(state);
   renderLog(state.requestLog || []);
 }
 
@@ -238,6 +241,47 @@ function renderSites(state) {
   }
 }
 
+// Elements the user blocked with the right-click menu or the element picker.
+function renderBlockedElements(state) {
+  const rules = state.customCosmetic || [];
+  blockedElements.innerHTML = '';
+  if (!rules.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'No blocked elements yet. Right-click an element and choose “Privacy Shield → Block element”.';
+    blockedElements.appendChild(empty);
+    return;
+  }
+
+  for (const rule of rules) {
+    const row = document.createElement('div');
+    row.className = 'site-row';
+
+    const separator = rule.indexOf('##');
+    const host = separator > 0 ? rule.slice(0, separator) : '';
+    const selector = separator > 0 ? rule.slice(separator + 2) : rule;
+
+    const entry = document.createElement('div');
+    entry.className = 'host';
+    entry.style.wordBreak = 'break-all';
+    entry.textContent = host ? `${host} — ${selector}` : selector;
+    row.appendChild(entry);
+
+    const remove = document.createElement('button');
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', async () => {
+      const current = await getState();
+      await browser.storage.local.set({
+        customCosmetic: (current.customCosmetic || []).filter((entry) => entry !== rule),
+      });
+      load();
+    });
+    row.appendChild(remove);
+
+    blockedElements.appendChild(row);
+  }
+}
+
 function renderLog(entries) {
   logEl.innerHTML = '';
   for (const entry of entries.slice(0, 100)) {
@@ -266,7 +310,7 @@ browser.storage.onChanged.addListener((changes) => {
   if (
     changes.filterLists || changes.customFilterLists || changes.filterListStatus ||
     changes.cookieProtection || changes.scriptControl || changes.siteSettings ||
-    changes.disabledSites || changes.requestLog
+    changes.disabledSites || changes.requestLog || changes.customCosmetic
   ) {
     load();
   }
