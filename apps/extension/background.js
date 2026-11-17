@@ -3,6 +3,18 @@ const BUILTIN_LISTS = [
   { id: 'easyprivacy', name: 'EasyPrivacy', url: 'https://easylist.to/easylist/easyprivacy.txt' },
   { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection', url: 'https://services.helium.imput.net/ubo/adguard-spyware-url/93b535a2/55a42892/privacy-removeparam.txt' },
   { id: 'peter-lowe-blocklist', name: "Peter Lowe's Blocklist", url: 'https://services.helium.imput.net/ubo/plowe-0/37f0810b/c20e4257/filters.txt' },
+  { id: 'annoyances', name: 'AdGuard Annoyances filter', url: 'https://filters.adtidy.org/extension/chromium/filters/14.txt' },
+  {
+    id: 'adguard-spyware',
+    name: 'AdGuard Spyware filter',
+    url: 'https://github.com/AdguardTeam/AdguardFilters/tree/master/SpywareFilter/sections',
+    urls: [
+      'allowlist.txt', 'cookies_allowlist.txt', 'cookies_general.txt',
+      'cookies_specific.txt', 'general_elemhide.txt', 'general_extensions.txt',
+      'general_url.txt', 'mobile.txt', 'mobile_allowlist.txt', 'specific.txt',
+      'tracking_servers.txt', 'tracking_servers_firstparty.txt',
+    ].map((file) => `https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/SpywareFilter/sections/${file}`),
+  },
   { id: 'russian', name: 'AdGuard Russian filter', url: 'https://filters.adtidy.org/extension/chromium/filters/1.txt' },
   { id: 'german', name: 'AdGuard German filter', url: 'https://filters.adtidy.org/extension/chromium/filters/6.txt' },
   { id: 'japanese', name: 'AdGuard Japanese filter', url: 'https://filters.adtidy.org/extension/chromium/filters/7.txt' },
@@ -32,6 +44,7 @@ const REMOVE_PARAM_DENYLIST = new Set([
 
 const HOSTS_SINK_IPS = new Set(['0.0.0.0', '127.0.0.1', '::', '::1', '255.255.255.255']);
 const HOSTNAME_PATTERN = /^(?:[a-z0-9_](?:[a-z0-9_-]*[a-z0-9])?\.)+[a-z]{2,}$/i;
+const SAFE_DOMAIN_OPTIONS = new Set(['third-party', 'all', 'important', 'match-case']);
 
 // Hosts-file entry -> sinkholed domains (`127.0.0.1 a.com b.com # note`).
 function parseHostsLine(line) {
@@ -140,6 +153,7 @@ function parseFilterList(text, options) {
 
     let removeParam = null;
     let otherOption = false;
+    const harmlessOptions = [];
     for (const option of listOptions) {
       const value = option.trim();
       if (!value) continue;
@@ -151,6 +165,7 @@ function parseFilterList(text, options) {
         removeParam = value.slice('removeparam='.length);
         continue;
       }
+      harmlessOptions.push(value.toLowerCase());
       otherOption = true;
     }
 
@@ -175,7 +190,8 @@ function parseFilterList(text, options) {
       continue;
     }
 
-    if (scope && !otherOption) {
+    const harmless = harmlessOptions.every((option) => SAFE_DOMAIN_OPTIONS.has(option));
+    if (scope && (!otherOption || harmless)) {
       if (!result.domains.has(scope)) {
         result.domains.add(scope);
         result.ruleCount += 1;
@@ -201,6 +217,86 @@ function compileRemoveParamRegex(list) {
   return compiled;
 }
 // --- end filter list parsing ------------------------------------------------
+
+const AGG_FLAGS = {
+  adguard_ext_chromium: true, adguard_ext_firefox: true,
+  ext_chromium: true, ext_firefox: true, desktop: true,
+  adguard_ext_chromium_mv3: false, adguard_ext_opera: false,
+  adguard_ext_safari: false, adguard_ext_android_cb: false,
+  adguard_app_windows: false, adguard_app_mac: false,
+  adguard_app_android: false, adguard_app_ios: false,
+  adguard_app_cli: false, ext_ublock: false,
+};
+
+function evaluateAggCondition(expression, flags = AGG_FLAGS) {
+  const tokens = expression.trim().match(/&&|\|\||[()!]|[A-Za-z0-9_]+/g) || [];
+  let position = 0;
+  const peek = () => tokens[position];
+  const parseOr = () => {
+    let value = parseAnd();
+    while (peek() === '||') { position += 1; value = value || parseAnd(); }
+    return value;
+  };
+  const parseAnd = () => {
+    let value = parseUnary();
+    while (peek() === '&&') { position += 1; value = value && parseUnary(); }
+    return value;
+  };
+  const parseUnary = () => {
+    const token = tokens[position++];
+    if (!token) return false;
+    if (token === '!') return !parseUnary();
+    if (token === '(') {
+      const value = parseOr();
+      if (peek() === ')') position += 1;
+      return value;
+    }
+    return token !== '&&' && token !== '||' && token !== ')' && flags[token] === true;
+  };
+  return parseOr() === true;
+}
+
+function preprocessAggFilter(text) {
+  const output = [];
+  const stack = [];
+  let active = true;
+  let modifier = null;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.startsWith('!#if')) {
+      stack.push(active);
+      active = active && evaluateAggCondition(line.slice(5));
+      modifier = null;
+      continue;
+    }
+    if (line.startsWith('!#endif')) {
+      active = stack.length ? stack.pop() : true;
+      modifier = null;
+      continue;
+    }
+    if (line.startsWith('!+')) {
+      const match = line.match(/PLATFORM\(([^)]*)\)/i);
+      modifier = match
+        ? { negate: /NOT_PLATFORM/i.test(line), platforms: match[1].split(',').map((name) => name.trim()).filter(Boolean) }
+        : null;
+      continue;
+    }
+    if (line.startsWith('!')) continue;
+    if (!active) {
+      modifier = null;
+      continue;
+    }
+    if (modifier) {
+      const listed = modifier.platforms.some((name) => AGG_FLAGS[name] === true);
+      const applies = modifier.negate ? !listed : listed;
+      modifier = null;
+      if (!applies) continue;
+    }
+    output.push(line);
+  }
+  return output.join('\n');
+}
 
 let blockedDomains = new Set();
 let cosmeticSelectors = [];
@@ -427,7 +523,12 @@ async function fetchLists() {
 
   const lists = await getLists();
   for (const list of lists) {
-    const listEnabled = isBuiltinList(list.id) ? filterLists[list.id] !== false : list.enabled !== false;
+    const defaultEnabled = ['easylist', 'easyprivacy', 'privacy-removeparam', 'peter-lowe-blocklist', 'annoyances', 'adguard-spyware'];
+    const listEnabled = isBuiltinList(list.id)
+      ? filterLists[list.id] === undefined
+        ? defaultEnabled.includes(list.id)
+        : filterLists[list.id] !== false
+      : list.enabled !== false;
     status[list.id] = {
       id: list.id,
       name: list.name || list.url,
@@ -440,18 +541,23 @@ async function fetchLists() {
     if (!listEnabled) continue;
 
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
-      const res = await fetch(list.url, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      // The helium mirror answers 406 with a short explanation when the client
-      // does not negotiate brotli. That body is not a filter list, and counting
-      // it as "0 rules" hid the real problem.
-      if (/brotli-encoded/i.test(text)) {
-        throw new Error('List server requires brotli; the browser did not negotiate it');
-      }
+      const sources = Array.isArray(list.urls) && list.urls.length ? list.urls : [list.url];
+      const texts = await Promise.all(sources.map(async (url) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        try {
+          const res = await fetch(url, { signal: controller.signal });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const text = await res.text();
+          if (/brotli-encoded/i.test(text)) {
+            throw new Error('List server requires brotli; the browser did not negotiate it');
+          }
+          return text;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }));
+      const text = preprocessAggFilter(texts.join('\n'));
       const parsed = parseFilterList(text);
       for (const domain of parsed.domains) domains.add(domain);
       for (const selector of parsed.cosmeticSelectors) selectors.add(selector);
