@@ -382,6 +382,7 @@ let siteSettings = {};
 let enabled = true;
 let cookieProtection = true;
 let scriptControl = false;
+let antiBlockerDefusing = true;
 
 // $removeparam state. Firefox can rewrite a URL before it is sent, so the
 // tracking parameters are removed here instead of only hidden in the UI.
@@ -586,7 +587,7 @@ function isSiteDisabled(host) {
 
 async function refreshState(keys) {
   const st = await browser.storage.local.get([
-    'enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules',
+    'enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules', 'antiBlockerDefusing',
   ]);
   if (!keys || keys.includes('enabled')) enabled = st.enabled !== false;
   if (!keys || keys.includes('disabledSites')) disabledSites = st.disabledSites || [];
@@ -597,6 +598,7 @@ async function refreshState(keys) {
   if (!keys || keys.includes('dynamicRules')) {
     dynamicRules = Array.isArray(st.dynamicRules) ? st.dynamicRules : [];
   }
+  if (!keys || keys.includes('antiBlockerDefusing')) antiBlockerDefusing = st.antiBlockerDefusing !== false;
 }
 
 async function fetchLists() {
@@ -872,7 +874,7 @@ browser.storage.onChanged.addListener((changes) => {
     return;
   }
   const relevant = Object.keys(changes).filter((k) =>
-    ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules', 'webRtcProtection'].includes(k)
+    ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules', 'webRtcProtection', 'antiBlockerDefusing'].includes(k)
   );
   if (relevant.length) {
     refreshState(relevant).then(updateAllBadges);
@@ -1018,6 +1020,17 @@ browser.webRequest.onBeforeRequest.addListener(
     if (!host) return {};
     const initiatorHost = initiatorHostOf(details);
     if (initiatorHost && isSiteDisabled(initiatorHost)) return {};
+
+    // Anti-blocker defusing: block the page's own detection script. Mirrors
+    // isAntiAdblockScript() in @privacy-shield/cosmetic-filter.
+    if (
+      antiBlockerDefusing && details.type === 'script' && initiatorHost &&
+      !isSiteDisabled(initiatorHost) &&
+      /blockadblock|anti-adblock|anti_adblock|adblock-detector/i.test(details.url)
+    ) {
+      recordBlocked(details.url, initiatorHost, details.tabId);
+      return { cancel: true };
+    }
 
     // Top-level navigations are never blocked, but their query string can still
     // be cleaned below.

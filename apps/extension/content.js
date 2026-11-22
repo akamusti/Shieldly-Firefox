@@ -29,6 +29,12 @@
   const GENERIC_CACHE_KEY = 'cosmeticCache';
   const COLLAPSE_CACHE_KEY = 'collapseCache';
   const HIDE = 'display: none !important;';
+  // Anti-blocker defusing: hide the overlay a site shows when it detects us.
+  const ANTI_ADBLOCK_SELECTORS = [
+    '#adblock-warning', '.adblock-notice', '.adblock-warning',
+    '.ad-blocker-notice', '[class*="adblock-overlay"]',
+    '[id*="adblock-notice"]', '[class*="anti-adblock"]',
+  ];
   const CHUNK_SIZE = 50;
   const MAX_SELECTORS_PER_HOST = 400;
   const MAX_HOSTS = 250;
@@ -543,6 +549,7 @@
       'cosmeticGeneric',
       'cosmeticExceptions',
       'customCosmetic',
+      'antiBlockerDefusing',
       GENERIC_CACHE_KEY,
       COLLAPSE_CACHE_KEY,
     ]);
@@ -571,6 +578,9 @@
       const rule = parseRuleEntry(entry);
       if (!rule || !rule.generic || rule.exception || !ruleAppliesTo(rule, host)) continue;
       pushUnique(generic, genericSeen, rule.selector);
+    }
+    if (state.active && stored.antiBlockerDefusing !== false) {
+      for (const selector of ANTI_ADBLOCK_SELECTORS) pushUnique(generic, genericSeen, selector);
     }
     for (const entry of stored.cosmeticExceptions || []) {
       const rule = parseRuleEntry(entry);
