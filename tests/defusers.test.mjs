@@ -10,6 +10,9 @@ test('local MAIN-world scriptlets are shipped', () => {
   assert.ok(defusers.includes("['admiral', 'noopFunc']"));
   assert.ok(defusers.includes("Object.defineProperty(window, prop"));
   assert.ok(defusers.includes('nativeSetTimeout.apply'));
+  assert.ok(defusers.includes('configurable: true'));
+  assert.ok(!defusers.includes('configurable: false'));
+  assert.ok(!content.includes('[class*="adblock"]'));
 });
 
 test('manifest injects defusers into the page world at document_start', () => {

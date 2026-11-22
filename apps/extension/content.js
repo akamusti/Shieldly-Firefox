@@ -33,8 +33,10 @@
   const ANTI_ADBLOCK_SELECTORS = [
     '#adblock-warning', '.adblock-notice', '.adblock-warning',
     '.ad-blocker-notice', '.modal--adblock', '.ab-notice',
-    '[class*="adblock"]', '[id*="adblock"]', '[class*="admiral"]',
-    '[id*="admiral"]', '[class*="anti-adblock"]',
+    '[class*="anti-adblock"]',
+    // Broad adblock/admiral selectors are intentionally avoided: companion
+    // blockers such as AdGuard Extra keep small bait ads visible on purpose.
+    // Notices without a stable class are handled by the text rules below.
   ];
   const ANTI_ADBLOCK_PHRASES = [
     'disabling your adblocker', 'disable your adblocker',

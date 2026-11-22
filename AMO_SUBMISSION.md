@@ -47,6 +47,15 @@ gömülüdür, listeler yalnızca veri/argüman sağlar. İzole dünyadaki
 prosedürel olarak uygular: uyarı metnini bulup üst dialog'u kaldırır, tam
 ekran perdeyi temizler ve `overflow`/`pointer-events` kilidini açar.
 
+### AdGuard Extra ile birlikte kullanım
+
+AdGuard Extra bağımsız bir companion userscript/extension'dır; bizim filtre
+motorumuzu kullanmaz, birlikte kurulabilir. Çakışmamak için MAIN world
+sabitleri `configurable: true` olarak tanımlanır (diğer blocker aynı global'e
+kendi scriptlet'ini kurabilir) ve geniş `[class*="adblock"]` CSS kuralları
+kullanılmaz — companion blocker'lar küçük "bait" reklamları bilerek görünür
+tutar. Sorun olursa **Defuse anti-adblock notices** ayarı kapatılabilir.
+
 ## Veri toplama
 
 Eklenti **hiçbir kullanıcı verisini harici bir sunucuya göndermez** ve

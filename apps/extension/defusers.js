@@ -57,7 +57,9 @@
       }
       const prop = parts[parts.length - 1];
       const value = valueOf(token);
-      Object.defineProperty(owner, prop, { configurable: false, get: function () { return value; }, set: function () {} });
+      // configurable keeps us compatible with companion blockers (e.g. AdGuard
+      // Extra) that may want to install their own scriptlet on the same global.
+      Object.defineProperty(owner, prop, { configurable: true, get: function () { return value; }, set: function () {} });
     } catch (e) {
       // A page may have locked the property already; leave it alone.
     }
@@ -66,7 +68,7 @@
   function abortOnRead(prop) {
     try {
       Object.defineProperty(window, prop, {
-        configurable: false,
+        configurable: true,
         get: function () { throw new ReferenceError('privacy-shield-defused'); },
         set: function () {},
       });

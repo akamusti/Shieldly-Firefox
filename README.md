@@ -54,6 +54,16 @@ Depends on `../privacy-shield-core` (file: dependencies). Build core first:
 pnpm -C ../privacy-shield-core build
 ```
 
+## AdGuard Extra compatibility
+
+AdGuard Extra is a separate companion userscript/extension; it does not use this
+extension's filter engine, so both can be installed together. To avoid clashes
+we keep MAIN-world globals `configurable` (another blocker may install its own
+scriptlet on the same property), and we deliberately avoid broad
+`[class*="adblock"]` CSS rules because companion blockers keep small "bait" ad
+elements visible on purpose. If a page misbehaves with both installed, turn off
+**Defuse anti-adblock notices** in Advanced settings and reload.
+
 ## Acknowledgements
 
 - **privacy-shield-core** — shared filtering engine and packages.
