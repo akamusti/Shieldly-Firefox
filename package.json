@@ -1,12 +1,13 @@
 {
   "name": "privacy-shield-firefox",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "private": true,
   "description": "Firefox (WebExtensions) adapter and extension for Privacy Shield.",
   "scripts": {
     "dev": "echo 'dev not configured yet'",
     "build": "echo 'build not configured yet'",
-    "test": "node --test"
+    "test": "node --test",
+    "lint:amo": "npx --yes web-ext@latest lint --source-dir apps/extension"
   },
   "dependencies": {
     "@privacy-shield/core-engine": "file:../privacy-shield-core/packages/core-engine",

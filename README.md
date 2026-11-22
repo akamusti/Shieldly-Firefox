@@ -30,6 +30,17 @@ packages/         # Firefox-specific adapter packages
 docs/             # Adapter notes
 ```
 
+## AMO submission
+
+The manifest declares `data_collection_permissions.required: ["none"]` and
+`strict_min_version: 140.0` (Android: `142.0`), as required for new add-ons on
+addons.mozilla.org. Permission justifications and the exact upload steps are in
+[`AMO_SUBMISSION.md`](AMO_SUBMISSION.md). Validate before uploading:
+
+```bash
+npm run lint:amo
+```
+
 ## Development
 
 ```bash
