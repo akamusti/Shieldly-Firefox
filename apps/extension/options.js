@@ -388,6 +388,55 @@ save.addEventListener('click', async () => {
   setTimeout(() => { saved.textContent = ''; }, 3000);
 });
 
+// Mirrors serializeSettings()/parseSettingsBackup() from @privacy-shield/storage.
+const BACKUP_KEYS = [
+  'enabled', 'filterLists', 'customFilterLists', 'customRulesText',
+  'cookieProtection', 'scriptControl', 'webRtcProtection', 'antiBlockerDefusing',
+  'strictBlocking', 'siteSettings', 'disabledSites', 'customCosmetic',
+  'whitelist', 'dynamicRules', 'extendedRules',
+];
+
+function backupMessage(text) {
+  const el = document.getElementById('backupMessage');
+  el.textContent = text;
+  setTimeout(() => { el.textContent = ''; }, 5000);
+}
+
+document.getElementById('exportSettings').addEventListener('click', async () => {
+  const stored = await browser.storage.local.get(BACKUP_KEYS);
+  const backup = {
+    format: 'privacy-shield-settings', version: 1, exportedAt: Date.now(), settings: stored,
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `privacy-shield-settings-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+  backupMessage('Settings exported.');
+});
+
+document.getElementById('importSettings').addEventListener('click', async () => {
+  const file = document.getElementById('importSettingsFile').files[0];
+  if (!file) { backupMessage('Choose a JSON backup first.'); return; }
+  try {
+    const parsed = JSON.parse(await file.text());
+    if (parsed.format !== 'privacy-shield-settings' || parsed.version !== 1 ||
+        !parsed.settings || typeof parsed.settings !== 'object') {
+      throw new Error('Unsupported backup format');
+    }
+    const clean = {};
+    for (const key of BACKUP_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(parsed.settings, key)) clean[key] = parsed.settings[key];
+    }
+    await browser.storage.local.set(clean);
+    backupMessage('Settings restored.');
+    await load();
+  } catch (error) {
+    backupMessage(`Import failed: ${error.message}`);
+  }
+});
+
 clearLog.addEventListener('click', async () => {
   await browser.storage.local.set({ requestLog: [] });
   renderLog([]);

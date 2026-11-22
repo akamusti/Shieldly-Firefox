@@ -71,6 +71,13 @@
     <button id="addWhitelist">Add host</button>
   </div>
 
+  <h2>Backup</h2>
+  <p class="muted">Export or restore your settings locally. No data is sent anywhere.</p>
+  <button id="exportSettings">Export settings</button>
+  <input type="file" id="importSettingsFile" accept="application/json,.json" />
+  <button id="importSettings">Import settings</button>
+  <span id="backupMessage" class="muted"></span>
+
   <h2>Blocked elements</h2>
   <p class="muted">Elements you blocked with the right-click menu or the element picker. “Remove” brings the element back.</p>
   <div id="blockedElements"></div>
