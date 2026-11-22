@@ -834,25 +834,45 @@ async function flushStats() {
   }
 }
 
-browser.runtime.onStartup.addListener(async () => { await fetchLists(); await updateAllBadges(); });
+// Mirrors resolveWebRtcPolicy() from @privacy-shield/privacy.
+async function applyWebRtcProtection(enabled) {
+  const network = browser.privacy && browser.privacy.network;
+  const policy = network && network.webRTCIPHandlingPolicy;
+  if (!policy || !policy.set) return;
+  try {
+    await policy.set({ value: enabled === true ? 'relay' : 'default' });
+  } catch {
+    // Managed profiles can reject the change.
+  }
+}
+
+browser.runtime.onStartup.addListener(async () => {
+  const { webRtcProtection = false } = await browser.storage.local.get('webRtcProtection');
+  await applyWebRtcProtection(webRtcProtection);
+  await fetchLists();
+  await updateAllBadges();
+});
 
 browser.runtime.onInstalled.addListener(async () => {
   const st = await browser.storage.local.get('enabled');
   if (st.enabled === undefined) {
     await browser.storage.local.set({ enabled: true, blocked: 0, disabledSites: [], siteSettings: {}, customFilterLists: [] });
   }
+  const { webRtcProtection = false } = await browser.storage.local.get('webRtcProtection');
+  await applyWebRtcProtection(webRtcProtection);
   await fetchLists();
   await updateAllBadges();
   console.log('Privacy Shield (Firefox) installed.');
 });
 
 browser.storage.onChanged.addListener((changes) => {
+  if (changes.webRtcProtection) applyWebRtcProtection(changes.webRtcProtection.newValue === true);
   if (changes.filterLists || changes.customFilterLists || changes.customRulesText || changes.whitelist) {
     fetchLists().then(updateAllBadges);
     return;
   }
   const relevant = Object.keys(changes).filter((k) =>
-    ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules'].includes(k)
+    ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules', 'webRtcProtection'].includes(k)
   );
   if (relevant.length) {
     refreshState(relevant).then(updateAllBadges);
