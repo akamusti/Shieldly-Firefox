@@ -74,16 +74,16 @@ AMO, manifest'in zip'in **kökünde** olmasını bekler. Release zip'i bu düzen
 
 ```bash
 cd apps/extension
-zip -r ../../privacy-shield-firefox-0.10.0-amo.zip .
+zip -r ../../privacy-shield-firefox-0.10.1-amo.zip .
 ```
 
 Ardından Developer Hub'da:
 
 1. Yeni add-on → listed (herkese açık) veya unlisted (self-distributed) seç.
-2. `privacy-shield-firefox-0.10.0-amo.zip` dosyasını yükle.
+2. `privacy-shield-firefox-0.10.1-amo.zip` dosyasını yükle.
 3. Permission justification alanlarına yukarıdaki tabloyu kopyala.
 4. Data collection sorusunda "No data is collected or transmitted" seç (manifest zaten `none` diyor).
-5. Kaynak paket istenirse `privacy-shield-firefox-0.10.0-source.zip` dosyasını yükle.
+5. Kaynak paket istenirse `privacy-shield-firefox-0.10.1-source.zip` dosyasını yükle.
 6. İmzalanmış `.xpi` dosyasını AMO'dan indir; doğrudan Firefox'a sürükle-bırak ile kur.
 
 ## Yayın notu
