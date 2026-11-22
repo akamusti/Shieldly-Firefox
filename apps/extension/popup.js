@@ -3,8 +3,8 @@
  * Kept: hostname + power switch, one page-stat line, per-site module
  * switches, a compact tool ribbon and the global protection toggle.
  * Removed: the status caption line, the extra statistics lines, the
- * version row, the dynamic-filtering firewall matrix, zapper, report
- * links and troubleshooting ribbons.
+ * version row, zapper, report links and troubleshooting ribbons.
+ * The dynamic-filtering firewall matrix is back (allow/block/noop).
  */
 const api = typeof browser !== 'undefined' ? browser : chrome;
 
@@ -22,6 +22,11 @@ const els = {
   openLog: document.getElementById('openLog'),
   openOptions: document.getElementById('openOptions'),
   globalToggle: document.getElementById('toggle'),
+  fwHost: document.getElementById('fwHost'),
+  fwTarget: document.getElementById('fwTarget'),
+  fwType: document.getElementById('fwType'),
+  fwRules: document.getElementById('fwRules'),
+  fwSet: Array.from(document.querySelectorAll('.fwSet')),
 };
 
 let host = '';
@@ -125,12 +130,52 @@ function render() {
     button.disabled = !host;
   }
   els.reloadTab.classList.toggle('visible', dirty && tabId >= 0);
+  renderFirewall();
+}
+
+// Mirrors resolveDynamicAction() from @privacy-shield/site-controls: A = allow,
+// B = block, N = no-op (skip lower-priority filters for that request).
+function renderFirewall() {
+  els.fwHost.textContent = host || 'no site';
+  for (const button of els.fwSet) button.disabled = !host;
+  const rules = (state.dynamicRules || []).filter((rule) => rule.hostname === host);
+  els.fwRules.innerHTML = '';
+  if (!rules.length) {
+    const empty = document.createElement('div');
+    empty.textContent = 'No dynamic rules for this site.';
+    empty.style.opacity = '.55';
+    els.fwRules.appendChild(empty);
+    return;
+  }
+  for (const rule of rules) {
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '6px';
+    const label = document.createElement('span');
+    label.textContent = `${rule.target} · ${rule.type} → ${rule.action}`;
+    label.style.flex = '1';
+    const remove = document.createElement('button');
+    remove.textContent = '×';
+    remove.title = 'Remove rule';
+    remove.addEventListener('click', async () => {
+      const { dynamicRules = [] } = await api.storage.local.get('dynamicRules');
+      await api.storage.local.set({
+        dynamicRules: dynamicRules.filter((entry) =>
+          !(entry.hostname === rule.hostname && entry.target === rule.target && entry.type === rule.type)),
+      });
+      markDirty();
+      await load();
+    });
+    row.append(label, remove);
+    els.fwRules.appendChild(row);
+  }
+  for (const button of els.fwSet) button.disabled = !host;
 }
 
 async function load() {
   state = await api.storage.local.get([
     'enabled', 'disabledSites', 'siteSettings', 'siteStats',
-    'cookieProtection', 'scriptControl',
+    'cookieProtection', 'scriptControl', 'dynamicRules',
   ]);
   await fetchStats();
   render();
@@ -219,6 +264,22 @@ els.siteScripts.addEventListener('click', async () => {
 
 els.siteCosmetic.addEventListener('click', () => toggleModule('cosmeticFiltering', true));
 
+for (const button of els.fwSet) {
+  button.addEventListener('click', async () => {
+    if (!host) return;
+    const target = els.fwTarget.value.trim().toLowerCase().replace(/^\*\.\./, '');
+    if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(target) && target !== '*') return;
+    const rule = { hostname: host, target, type: els.fwType.value, action: button.dataset.action };
+    const { dynamicRules = [] } = await api.storage.local.get('dynamicRules');
+    const next = dynamicRules.filter((entry) =>
+      !(entry.hostname === rule.hostname && entry.target === rule.target && entry.type === rule.type));
+    await api.storage.local.set({ dynamicRules: [...next, rule].slice(-300) });
+    els.fwTarget.value = '';
+    markDirty();
+    await load();
+  });
+}
+
 els.globalToggle.addEventListener('click', async () => {
   const { enabled = true } = await api.storage.local.get('enabled');
   await api.storage.local.set({ enabled: !enabled });
@@ -262,7 +323,7 @@ api.storage.onChanged.addListener((changes, area) => {
   }
   if (
     changes.enabled || changes.disabledSites || changes.siteSettings ||
-    changes.cookieProtection || changes.scriptControl
+    changes.cookieProtection || changes.scriptControl || changes.dynamicRules
   ) {
     load();
   }

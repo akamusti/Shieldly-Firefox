@@ -292,6 +292,24 @@
     </button>
   </div>
 
+  <section id="firewall" aria-label="Dynamic filtering" style="padding:8px 12px;border-top:1px solid rgba(255,255,255,.08)">
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+      <b>Dynamic filtering</b><span id="fwHost" style="opacity:.6"></span>
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap">
+      <input id="fwTarget" placeholder="domain or *" style="flex:1;min-width:90px" />
+      <select id="fwType" style="max-width:96px">
+        <option value="*">all</option><option>script</option><option>image</option>
+        <option>xmlhttprequest</option><option>sub_frame</option><option>stylesheet</option>
+        <option>media</option><option>font</option>
+      </select>
+      <button class="fwSet" data-action="allow" title="Always allow">A</button>
+      <button class="fwSet" data-action="block" title="Always block">B</button>
+      <button class="fwSet" data-action="noop" title="Ignore lower-priority filters">N</button>
+    </div>
+    <div id="fwRules" style="margin-top:6px;font-size:11px"></div>
+  </section>
+
   <footer id="footer">
     <div class="global-row">
       <span class="label">Protection everywhere<span class="hint">Per-site choices override this</span></span>

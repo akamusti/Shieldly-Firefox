@@ -352,6 +352,30 @@ let allowedDomains = new Set();
 // engine cannot enforce (shown in the options page).
 let extendedRules = [];
 let unsupportedRules = [];
+// --- dynamic filtering
+// Per-site uBO-style firewall rules (allow / block / noop).
+let dynamicRules = [];
+
+function dynamicSuffixMatches(host, suffix) {
+  return suffix === '*' || host === suffix || host.endsWith(`.${suffix}`);
+}
+
+// Mirrors resolveDynamicAction() in @privacy-shield/site-controls.
+function resolveDynamicAction(hostname, target, type) {
+  return dynamicRules
+    .filter((rule) =>
+      dynamicSuffixMatches(hostname.toLowerCase(), rule.hostname.toLowerCase()) &&
+      dynamicSuffixMatches(target.toLowerCase(), rule.target.toLowerCase()) &&
+      (rule.type === '*' || rule.type === type))
+    .sort((a, b) => {
+      const page = b.hostname.length - a.hostname.length;
+      if (page) return page;
+      const targetDelta = (b.target === '*' ? 0 : 1) - (a.target === '*' ? 0 : 1);
+      if (targetDelta) return targetDelta;
+      return (b.type === '*' ? 0 : 1) - (a.type === '*' ? 0 : 1);
+    })[0]?.action ?? null;
+}
+// --- end dynamic filtering
 let cosmeticSelectors = [];
 let disabledSites = [];
 let siteSettings = {};
@@ -562,7 +586,7 @@ function isSiteDisabled(host) {
 
 async function refreshState(keys) {
   const st = await browser.storage.local.get([
-    'enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl',
+    'enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules',
   ]);
   if (!keys || keys.includes('enabled')) enabled = st.enabled !== false;
   if (!keys || keys.includes('disabledSites')) disabledSites = st.disabledSites || [];
@@ -570,6 +594,9 @@ async function refreshState(keys) {
   if (!keys || keys.includes('cosmeticSelectors')) cosmeticSelectors = st.cosmeticSelectors || [];
   if (!keys || keys.includes('cookieProtection')) cookieProtection = st.cookieProtection !== false;
   if (!keys || keys.includes('scriptControl')) scriptControl = st.scriptControl === true;
+  if (!keys || keys.includes('dynamicRules')) {
+    dynamicRules = Array.isArray(st.dynamicRules) ? st.dynamicRules : [];
+  }
 }
 
 async function fetchLists() {
@@ -825,7 +852,7 @@ browser.storage.onChanged.addListener((changes) => {
     return;
   }
   const relevant = Object.keys(changes).filter((k) =>
-    ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl'].includes(k)
+    ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules'].includes(k)
   );
   if (relevant.length) {
     refreshState(relevant).then(updateAllBadges);
@@ -977,9 +1004,12 @@ browser.webRequest.onBeforeRequest.addListener(
     if (details.type !== 'main_frame') {
       // Only block third-party requests so first-party site resources always load.
       const thirdParty = !!initiatorHost && !sameSite(initiatorHost, host);
-      const blocked = thirdParty &&
-        ((settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script' && !isAllowedHost(host)) ||
-          isBlockedHost(host));
+      const dynamic = initiatorHost ? resolveDynamicAction(initiatorHost, host, details.type) : null;
+      const passthrough = dynamic === 'allow' || dynamic === 'noop';
+      const blocked = dynamic === 'block' ||
+        (thirdParty && !passthrough &&
+          ((settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script' && !isAllowedHost(host)) ||
+            isBlockedHost(host)));
       noteRequest(details.tabId, host, blocked);
       if (blocked) {
         recordBlocked(details.url, initiatorHost, details.tabId);
