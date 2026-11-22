@@ -1,6 +1,6 @@
 {
   "name": "privacy-shield-firefox",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "private": true,
   "description": "Firefox (WebExtensions) adapter and extension for Privacy Shield.",
   "scripts": {
