@@ -1035,6 +1035,9 @@ const TRACKING_REDIRECT_TYPES = new Set(['main_frame', 'sub_frame', 'xmlhttprequ
 // uBO's `$removeparam`: rewrite the URL so the tracking parameters never reach
 // the site. Auth/session parameters are denylisted at parse time, so a login or
 // OAuth round-trip is never broken by a list that thinks `token` is tracking.
+// Mirrors applyRemoveParams() in @privacy-shield/network-filter; Firefox can
+// enforce regex rules directly through webRequest (Chromium needs a content
+// script fallback because DNR cannot express regex query transforms).
 function stripTrackingParams(url, host) {
   if (!globalRemoveParams.size && !scopedRemoveParams.size && !regexRemoveParams.length) return null;
   let parsed;
