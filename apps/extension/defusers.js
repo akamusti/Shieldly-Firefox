@@ -22,9 +22,6 @@
     'antiAdBlockerHandler', 'checkAdblockBait',
     'DisplayAcceptableAdIfAdblocked', 'adblockDetector',
   ];
-  // One regex compiled ONCE at document_start. Compiling six regexes inside
-  // the setTimeout wrapper on every timer call delayed page scripts badly.
-  const TIMER_TEST = /ad_blocker_detector_modal|displayAdBlockedVideo|initializeAdblockDetection|showModal\(\)|chooseAction\(\)|disable adblocker/i;
 
   function valueOf(token) {
     switch (token) {
@@ -77,18 +74,5 @@
 
   for (const [path, token] of FLAGS) defineFlag(path, token);
   for (const prop of ABORT_PROPERTIES) abortOnRead(prop);
-
-  const nativeSetTimeout = window.setTimeout;
-  window.setTimeout = function (fn, delay) {
-    try {
-      const source = String(fn);
-      // Most callbacks are tiny; skip regex work unless they are short and
-      // could plausibly be a detector callback.
-      if (source.length < 8192 && TIMER_TEST.test(source)) return 0;
-    } catch (e) {
-      // Fall through to the native call.
-    }
-    return nativeSetTimeout.apply(this, arguments);
-  };
 
 })();

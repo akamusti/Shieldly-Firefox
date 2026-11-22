@@ -568,61 +568,49 @@
     list.push(value);
   }
 
-  // Fallback for notices whose DOM has no predictable class (Admiral/Playwire
-  // modals on Letterboxd and similar sites): find the smallest element carrying
-  // a known phrase and hide its fixed/absolute overlay ancestor too.
-  let defuseTimer = null;
-  let defuseObserver = null;
-  // Watch only the initial page build. Keeping a subtree observer alive on a
-  // busy page (Twitch, etc.) delayed other extensions and page scripts.
-  const defuseUntil = Date.now() + 8000;
-
-  function stopDefuseObserver() {
-    if (defuseObserver) {
-      defuseObserver.disconnect();
-      defuseObserver = null;
-    }
-  }
+  // Defusing is deliberately one-shot: a fixed pair of checks for late modals.
+  // A MutationObserver plus full-document text scans froze busy pages.
+  const NOTICE_CANDIDATES = [
+    'dialog', '[role="dialog"]', '[class*="modal"]', '[id*="modal"]',
+    '[class*="notice"]', '[id*="notice"]', '[style*="fixed"]', '[style*="z-index"]',
+    '.adblock-notice', '.ad-blocker-notice',
+  ].join(',');
+  let scrubsDone = 0;
 
   function scrubDetectorScripts() {
+    if (scrubsDone >= 2) return;
+    scrubsDone += 1;
     try {
       const scripts = document.querySelectorAll('script:not([src])');
-      for (let i = 0; i < scripts.length && i < 200; i += 1) {
+      for (let i = 0; i < scripts.length && i < 100; i += 1) {
         const script = scripts[i];
         if (script.dataset.psScrubbed === '1') continue;
         const text = script.textContent || '';
-        if (!text || text.length > 100000) continue;
+        if (!text || text.length > 50000) continue;
         if (DETECTOR_SCRIPT_PATTERNS.some((re) => re.test(text))) {
           script.textContent = '';
           script.dataset.psScrubbed = '1';
         }
       }
     } catch (e) {
-      // Inline scripts are best-effort; the MAIN-world scriptlets still run.
+      // Best effort: MAIN-world scriptlets still cover detection.
     }
   }
 
   function defuseTextNotices() {
     try {
-      const body = document.body;
-      if (!body) return;
+      if (!state.active || !state.antiBlockerDefusing) return;
       scrubDetectorScripts();
-      const pageText = (body.textContent || '').toLowerCase();
-      // Cheap substring check on long pages: running four regexes over
-      // hundreds of kilobytes on every DOM change was the main slowdown.
-      const detected = pageText.length > 20000
-        ? ANTI_ADBLOCK_PHRASES.some((phrase) => pageText.includes(phrase))
-        : !!matchesNotice(pageText);
-      if (!detected) return;
-
       const noticed = [];
-      for (const el of document.querySelectorAll('div,section,aside,dialog,[role="dialog"]')) {
+      for (const el of document.querySelectorAll(NOTICE_CANDIDATES)) {
         if (!el.isConnected || el.dataset.psDefused === '1') continue;
         const text = (el.textContent || '').toLowerCase();
-        if (!text || text.length > 1200) continue;
+        if (!text || text.length > 1500) continue;
         const up = matchesNotice(text);
         if (up) noticed.push([el, up]);
       }
+      if (!noticed.length) return;
+
       for (const [el, up] of noticed) {
         if (!el.isConnected) continue;
         let target = el;
@@ -631,11 +619,9 @@
         target.remove();
       }
 
-      // Remove the full-viewport scrim left behind by the modal. Measure the
-      // rect first (cheap) and only then read computed styles for the few
-      // elements that actually cover the viewport.
+      // Only when a notice was actually found: remove the full-screen scrim
+      // and release the scroll/click lock it left behind.
       for (const el of document.querySelectorAll('div,section')) {
-        if (el.dataset.psDefused === '1') continue;
         const rect = el.getBoundingClientRect();
         if (rect.width < window.innerWidth * 0.9 || rect.height < window.innerHeight * 0.9) continue;
         const style = getComputedStyle(el);
@@ -651,28 +637,14 @@
           if (/adblock|admiral|blocker/i.test(cls)) root.classList.remove(cls);
         }
       }
-      stopDefuseObserver();
     } catch (e) {
       // A restrictive page must still render normally.
     }
   }
 
-  function scheduleDefuse() {
-    if (Date.now() > defuseUntil) {
-      stopDefuseObserver();
-      return;
-    }
-    if (defuseTimer) return;
-    defuseTimer = setTimeout(() => {
-      defuseTimer = null;
-      defuseTextNotices();
-    }, 400);
-  }
-
-  if (document.documentElement && typeof MutationObserver !== 'undefined') {
-    defuseObserver = new MutationObserver(scheduleDefuse);
-    defuseObserver.observe(document.documentElement, { childList: true, subtree: true });
-  }
+  scrubDetectorScripts();
+  setTimeout(() => defuseTextNotices(), 900);
+  setTimeout(() => defuseTextNotices(), 2500);
 
   async function loadState() {
     const stored = await api.storage.local.get([
@@ -692,10 +664,7 @@
     const siteDisabled = (stored.disabledSites || []).includes(host) || site.enabled === false;
     const cosmeticEnabled = typeof site.cosmeticFiltering === 'boolean' ? site.cosmeticFiltering : true;
     state.active = stored.enabled !== false && !siteDisabled && cosmeticEnabled;
-    if (state.active && stored.antiBlockerDefusing !== false) {
-      defuseTextNotices();
-      scheduleDefuse();
-    }
+    state.antiBlockerDefusing = stored.antiBlockerDefusing !== false;
 
     caches.generic = sanitizeCache(stored[GENERIC_CACHE_KEY]);
     caches.collapse = sanitizeCache(stored[COLLAPSE_CACHE_KEY]);
