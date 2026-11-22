@@ -41,6 +41,24 @@
     'disable your ad blocker', 'adblocker detected',
     'ad blocker detected', 'please disable your ad',
   ];
+  // uBO-style procedural rules: match by text, then climb to the dialog.
+  const ANTI_ADBLOCK_PATTERNS = [
+    { re: /disabl(e|ing|ed)\s+(your\s+)?ads?\s?-?block(er|ing)?/i, up: 3 },
+    { re: /ad\s?-?block(er|ing)\s+detected/i, up: 3 },
+    { re: /please\s+disable\s+your\s+ad/i, up: 3 },
+    { re: /ad\s?-?block(er|ing)\s+notice/i, up: 2 },
+  ];
+  // uBO `^script:has-text()` equivalent, scrubbed before execution.
+  const DETECTOR_SCRIPT_PATTERNS = [
+    /antiAdBlockerHandler/i, /adblockerDisabled/i, /__adblocker/i,
+    /DisplayAcceptableAdIfAdblocked/i, /checkAdblockBait/i,
+    /ad_block_detector/i,
+  ];
+  function matchesNotice(text) {
+    if (ANTI_ADBLOCK_PHRASES.some((phrase) => text.includes(phrase))) return 3;
+    const pattern = ANTI_ADBLOCK_PATTERNS.find((entry) => entry.re.test(text));
+    return pattern ? pattern.up : 0;
+  }
   const CHUNK_SIZE = 50;
   const MAX_SELECTORS_PER_HOST = 400;
   const MAX_HOSTS = 250;
@@ -554,28 +572,42 @@
   let defuseTimer = null;
   const defuseUntil = Date.now() + 15000;
 
+  function scrubDetectorScripts() {
+    try {
+      for (const script of document.querySelectorAll('script:not([src])')) {
+        if (script.dataset.psScrubbed === '1') continue;
+        const text = script.textContent || '';
+        if (!text || text.length > 100000) continue;
+        if (DETECTOR_SCRIPT_PATTERNS.some((re) => re.test(text))) {
+          script.textContent = '';
+          script.dataset.psScrubbed = '1';
+        }
+      }
+    } catch (e) {
+      // Inline scripts are best-effort; the MAIN-world scriptlets still run.
+    }
+  }
+
   function defuseTextNotices() {
     try {
+      scrubDetectorScripts();
       const pageText = (document.body ? document.body.textContent : '').toLowerCase();
-      const detected = ANTI_ADBLOCK_PHRASES.some((phrase) => pageText.includes(phrase));
-      if (!detected) return;
+      if (!matchesNotice(pageText.slice(0, 200000))) return;
 
+      const noticed = [];
       for (const el of document.querySelectorAll('div,section,aside,dialog,[role="dialog"]')) {
-        if (el.dataset.psDefused === '1') continue;
+        if (!el.isConnected || el.dataset.psDefused === '1') continue;
         const text = (el.textContent || '').toLowerCase();
-        if (text.length > 1200 || !ANTI_ADBLOCK_PHRASES.some((phrase) => text.includes(phrase))) continue;
-        let node = el;
-        while (node && node !== document.body) {
-          const style = getComputedStyle(node);
-          if (style.position === 'fixed' || style.position === 'absolute') {
-            node.style.setProperty('display', 'none', 'important');
-            node.dataset.psDefused = '1';
-            break;
-          }
-          node = node.parentElement;
-        }
-        el.style.setProperty('display', 'none', 'important');
-        el.dataset.psDefused = '1';
+        if (!text || text.length > 1200) continue;
+        const up = matchesNotice(text);
+        if (up) noticed.push([el, up]);
+      }
+      for (const [el, up] of noticed) {
+        if (!el.isConnected) continue;
+        let target = el;
+        for (let i = 0; i < up && target.parentElement; i += 1) target = target.parentElement;
+        if (target === document.body || target === document.documentElement || !target.isConnected) continue;
+        target.remove();
       }
 
       // The dialog usually has a separate full-viewport scrim. Without
@@ -598,7 +630,7 @@
           if (/adblock|admiral|blocker/i.test(cls)) root.classList.remove(cls);
         }
       }
-    } catch {
+    } catch (e) {
       // A restrictive page must still render normally.
     }
   }
@@ -678,6 +710,7 @@
   }
 
   async function apply() {
+    scrubDetectorScripts();
     try {
       await loadState();
     } catch {

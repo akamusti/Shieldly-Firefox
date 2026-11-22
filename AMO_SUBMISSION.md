@@ -31,6 +31,22 @@ npm run lint:amo     # web-ext lint
 | `menus` | Sağ tık menüsüne "Block element" girdisini eklemek için. |
 | `<all_urls>` (host permission) | İçerik scripti tüm sitelerde çalışmalı ve istek filtrelemesi tüm siteleri kapsamalı. Kullanıcı MV3Extensions button ile site bazında kapatabilir. |
 
+## Anti-adblock scriptlet'leri (MAIN world)
+
+`apps/extension/defusers.js`, manifest üzerinden `world: "MAIN"` ve
+`run_at: "document_start"` ile sayfa dünyasına enjekte edilen **yerel** bir
+dosyadır. uBO/AdGuard ile aynı modeli kullanır:
+
+- `set-constant` benzeri sabitler (`adblock`, `admiral`, `adBlockDetected` …)
+- `abort-on-property-read` benzeri detector function trap'leri
+- `prevent-setTimeout` (uBO `nostif`) ve `noeval-if`
+
+Filtre listelerinden **çalıştırılabilir kod indirilmez**; kod eklenti içinde
+gömülüdür, listeler yalnızca veri/argüman sağlar. İzole dünyadaki
+`content.js` ayrıca uBO'nun `:has-text()` / `^script:has-text()` yaklaşımını
+prosedürel olarak uygular: uyarı metnini bulup üst dialog'u kaldırır, tam
+ekran perdeyi temizler ve `overflow`/`pointer-events` kilidini açar.
+
 ## Veri toplama
 
 Eklenti **hiçbir kullanıcı verisini harici bir sunucuya göndermez** ve
