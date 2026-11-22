@@ -21,4 +21,6 @@ test('content script hides anti-adblock overlays', () => {
   assert.ok(match[1].includes('.adblock-notice'));
   assert.ok(match[1].includes('[class*="admiral"]'));
   assert.ok(content.includes('disabling your adblocker'));
+  assert.ok(content.includes('window.innerWidth * 0.9'));
+  assert.ok(content.includes("removeProperty('overflow')"));
 });

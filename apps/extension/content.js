@@ -556,13 +556,18 @@
 
   function defuseTextNotices() {
     try {
+      const pageText = (document.body ? document.body.textContent : '').toLowerCase();
+      const detected = ANTI_ADBLOCK_PHRASES.some((phrase) => pageText.includes(phrase));
+      if (!detected) return;
+
       for (const el of document.querySelectorAll('div,section,aside,dialog,[role="dialog"]')) {
         if (el.dataset.psDefused === '1') continue;
         const text = (el.textContent || '').toLowerCase();
         if (text.length > 1200 || !ANTI_ADBLOCK_PHRASES.some((phrase) => text.includes(phrase))) continue;
         let node = el;
         while (node && node !== document.body) {
-          if (getComputedStyle(node).position === 'fixed' || getComputedStyle(node).position === 'absolute') {
+          const style = getComputedStyle(node);
+          if (style.position === 'fixed' || style.position === 'absolute') {
             node.style.setProperty('display', 'none', 'important');
             node.dataset.psDefused = '1';
             break;
@@ -571,6 +576,27 @@
         }
         el.style.setProperty('display', 'none', 'important');
         el.dataset.psDefused = '1';
+      }
+
+      // The dialog usually has a separate full-viewport scrim. Without
+      // removing it the page stays dark and uninteractive after the modal is
+      // gone — exactly what the user sees on Letterboxd.
+      for (const el of document.querySelectorAll('div,section')) {
+        if (el.dataset.psDefused === '1') continue;
+        const style = getComputedStyle(el);
+        if (style.position !== 'fixed' && style.position !== 'absolute') continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < window.innerWidth * 0.9 || rect.height < window.innerHeight * 0.9) continue;
+        el.style.setProperty('display', 'none', 'important');
+        el.dataset.psDefused = '1';
+      }
+      for (const root of [document.body, document.documentElement]) {
+        if (!root) continue;
+        root.style.removeProperty('overflow');
+        root.style.removeProperty('pointer-events');
+        for (const cls of Array.from(root.classList)) {
+          if (/adblock|admiral|blocker/i.test(cls)) root.classList.remove(cls);
+        }
       }
     } catch {
       // A restrictive page must still render normally.
