@@ -28,8 +28,15 @@
 </head>
 <body>
   <h1>Privacy Shield — Advanced</h1>
+  <nav id="dashTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 16px">
+    <button data-scroll="filter-lists">Filter lists</button>
+    <button data-scroll="my-filters">My Filters</button>
+    <button data-scroll="my-rules">My Rules</button>
+    <button data-scroll="whitelist-panel">Whitelist</button>
+    <button data-scroll="request-log">Request log</button>
+  </nav>
 
-  <h2>Filter lists</h2>
+  <h2 id="filter-lists">Filter lists</h2>
   <div id="lists"></div>
   <div class="add-row">
     <input type="text" id="listName" placeholder="List name (optional)" />
@@ -57,13 +64,18 @@
   <p class="muted">Per-site overrides. “Reset” removes the override and returns the site to global defaults.</p>
   <div id="sites"></div>
 
-  <h2>Custom rules</h2>
+  <h2 id="my-filters">My Filters</h2>
   <p class="muted">One rule per line, e.g. <code>||ads.example.com^</code></p>
   <textarea id="customRules" placeholder="||ads.example.com^"></textarea>
+  <span id="ruleSummary" class="muted"></span>
   <button id="save">Save</button>
   <span id="saved" class="muted"></span>
 
-  <h2>Whitelist</h2>
+  <h2 id="my-rules">My Rules</h2>
+  <p class="muted">Dynamic filtering rules created in the popup. “Remove” deletes a rule.</p>
+  <div id="myRules"></div>
+
+  <h2 id="whitelist-panel">Whitelist</h2>
   <p class="muted">Hosts that are never blocked, like uBO's <code>@@</code> exceptions. Subdomains are included.</p>
   <div id="whitelist"></div>
   <div class="add-row">

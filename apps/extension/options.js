@@ -53,7 +53,7 @@ async function getState() {
   return browser.storage.local.get([
     'filterLists', 'customFilterLists', 'filterListStatus', 'customRulesText',
     'cookieProtection', 'scriptControl', 'webRtcProtection', 'antiBlockerDefusing', 'strictBlocking', 'siteSettings', 'disabledSites', 'siteStats', 'requestLog',
-    'customCosmetic', 'whitelist', 'unsupportedRules',
+    'customCosmetic', 'whitelist', 'unsupportedRules', 'dynamicRules',
   ]);
 }
 
@@ -70,6 +70,8 @@ async function load() {
   renderBlockedElements(state);
   renderWhitelist(state);
   renderUnsupported(state.unsupportedRules || []);
+  renderMyRules(state.dynamicRules || []);
+  renderRuleSummary(customRules.value);
   renderLog(state.requestLog || []);
 }
 
@@ -253,6 +255,62 @@ function renderSites(state) {
     row.appendChild(reset);
     sitesEl.appendChild(row);
   }
+}
+
+// Mirrors summarizeRules() in @privacy-shield/filter-manager.
+function renderRuleSummary(text) {
+  const summary = { total: 0, network: 0, exception: 0, cosmetic: 0, invalid: 0 };
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('!') || (line.startsWith('#') && !line.includes('##'))) continue;
+    summary.total += 1;
+    if (line.includes('##') || line.includes('#@#')) summary.cosmetic += 1;
+    else if (line.startsWith('@@')) summary.exception += 1;
+    else if (/^[|*]/.test(line) || /\.$/.test(line)) summary.network += 1;
+    else summary.invalid += 1;
+  }
+  document.getElementById('ruleSummary').textContent =
+    `${summary.total} rules · ${summary.network} network · ${summary.cosmetic} cosmetic · ` +
+    `${summary.exception} exceptions · ${summary.invalid} unrecognized`;
+}
+
+function renderMyRules(rules) {
+  const container = document.getElementById('myRules');
+  container.innerHTML = '';
+  if (!rules.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'No dynamic rules yet. Use the Allow/Block/Noop buttons in the popup.';
+    container.appendChild(empty);
+    return;
+  }
+  for (const rule of rules.slice().reverse()) {
+    const row = document.createElement('div');
+    row.className = 'site-row';
+    const label = document.createElement('div');
+    label.className = 'host';
+    label.textContent = `${rule.hostname} → ${rule.target} · ${rule.type} → ${rule.action}`;
+    const remove = document.createElement('button');
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', async () => {
+      const { dynamicRules = [] } = await browser.storage.local.get('dynamicRules');
+      await browser.storage.local.set({
+        dynamicRules: dynamicRules.filter((entry) =>
+          !(entry.hostname === rule.hostname && entry.target === rule.target && entry.type === rule.type)),
+      });
+      load();
+    });
+    row.append(label, remove);
+    container.appendChild(row);
+  }
+}
+
+for (const button of document.querySelectorAll('#dashTabs button')) {
+  button.addEventListener('click', () => {
+    const target = document.getElementById(button.dataset.scroll);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 // Rules listed in PROJECT_SPEC as "report unsupported filters to the user".
@@ -447,7 +505,7 @@ browser.storage.onChanged.addListener((changes) => {
     changes.filterLists || changes.customFilterLists || changes.filterListStatus ||
     changes.cookieProtection || changes.scriptControl || changes.siteSettings ||
     changes.disabledSites || changes.requestLog || changes.customCosmetic || changes.whitelist ||
-    changes.unsupportedRules
+    changes.unsupportedRules || changes.dynamicRules || changes.customRulesText
   ) {
     load();
   }
