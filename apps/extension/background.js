@@ -548,6 +548,28 @@ async function getLists() {
   return [...BUILTIN_LISTS, ...customFilterLists];
 }
 
+// Mirrors prioritizeDomains() from @privacy-shield/filter-compiler. Firefox
+// has no DNR quota, but keeping the rule set bounded avoids slow suffix walks.
+const MAX_BLOCK_DOMAINS = 10000;
+const PRIORITY_HINTS = [
+  'doubleclick', 'googlesyndication', 'googleadservices', 'googletagmanager',
+  'google-analytics', 'adnxs', 'casalemedia', 'criteo', 'taboola', 'outbrain',
+];
+
+function prioritizeDomains(domains, quota) {
+  const score = (domain) => {
+    for (let i = 0; i < PRIORITY_HINTS.length; i++) {
+      if (domain.toLowerCase().includes(PRIORITY_HINTS[i])) return PRIORITY_HINTS.length - i;
+    }
+    return 0;
+  };
+  return Array.from(domains)
+    .map((domain, index) => ({ domain, index, score: score(domain) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, quota)
+    .map((entry) => entry.domain);
+}
+
 function isAllowedHost(host) {
   if (!host || !allowedDomains.size) return false;
   const parts = host.toLowerCase().split('.');
@@ -744,7 +766,8 @@ async function fetchLists() {
   unsupportedRules = unsupported;
   strictDomains = strict;
   allowedDomains = allowed;
-  blockedDomains = new Set([...domains].filter((domain) => !isAllowedHost(domain)));
+  const rankedDomains = prioritizeDomains(domains, MAX_BLOCK_DOMAINS);
+  blockedDomains = new Set(rankedDomains.filter((domain) => !isAllowedHost(domain)));
   cosmeticSelectors = Array.from(selectors);
   globalRemoveParams = params;
   scopedRemoveParams = scoped;

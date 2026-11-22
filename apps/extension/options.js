@@ -53,7 +53,7 @@ async function getState() {
   return browser.storage.local.get([
     'filterLists', 'customFilterLists', 'filterListStatus', 'customRulesText',
     'cookieProtection', 'scriptControl', 'webRtcProtection', 'antiBlockerDefusing', 'strictBlocking', 'siteSettings', 'disabledSites', 'siteStats', 'requestLog',
-    'customCosmetic', 'whitelist', 'unsupportedRules', 'dynamicRules',
+    'customCosmetic', 'whitelist', 'unsupportedRules', 'dynamicRules', 'dnrQuotaNotice',
   ]);
 }
 
@@ -66,6 +66,7 @@ async function load() {
   strictBlocking.checked = state.strictBlocking !== false;
   customRules.value = state.customRulesText || '';
   renderLists(state);
+  document.getElementById('quotaNotice').textContent = state.dnrQuotaNotice || '';
   renderSites(state);
   renderBlockedElements(state);
   renderWhitelist(state);
@@ -505,7 +506,7 @@ browser.storage.onChanged.addListener((changes) => {
     changes.filterLists || changes.customFilterLists || changes.filterListStatus ||
     changes.cookieProtection || changes.scriptControl || changes.siteSettings ||
     changes.disabledSites || changes.requestLog || changes.customCosmetic || changes.whitelist ||
-    changes.unsupportedRules || changes.dynamicRules || changes.customRulesText
+    changes.unsupportedRules || changes.dynamicRules || changes.customRulesText || changes.dnrQuotaNotice
   ) {
     load();
   }
