@@ -57,6 +57,21 @@ test('parses hosts-file entries and anchored network domains', () => {
   );
 });
 
+test('parses @@ allow rules and ignores § section separators', () => {
+  const parsed = context.parseFilterList([
+    '§----------------',
+    '@@§----------------',
+    '||ads.example^',
+    '@@||ads.example^',
+    '@@allowed.example',
+    '@@||cosmetic.example#@#.ad',
+  ].join('\n'));
+
+  assert.deepEqual(Array.from(parsed.allowedDomains).sort(), ['ads.example', 'allowed.example']);
+  assert.deepEqual(Array.from(parsed.domains), ['ads.example']);
+  assert.equal(parsed.ruleCount, 3);
+});
+
 test('applies global and parent-domain removeparam rules but preserves auth parameters', () => {
   context.hooks.setRules(
     ['utm_source'],

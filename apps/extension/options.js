@@ -50,7 +50,7 @@ async function getState() {
   return browser.storage.local.get([
     'filterLists', 'customFilterLists', 'filterListStatus', 'customRulesText',
     'cookieProtection', 'scriptControl', 'siteSettings', 'disabledSites', 'siteStats', 'requestLog',
-    'customCosmetic',
+    'customCosmetic', 'whitelist',
   ]);
 }
 
@@ -62,6 +62,7 @@ async function load() {
   renderLists(state);
   renderSites(state);
   renderBlockedElements(state);
+  renderWhitelist(state);
   renderLog(state.requestLog || []);
 }
 
@@ -247,6 +248,49 @@ function renderSites(state) {
   }
 }
 
+// uBO-style whitelist: these hosts (and their subdomains) are never blocked.
+function renderWhitelist(state) {
+  const hosts = Array.isArray(state.whitelist) ? state.whitelist.slice().sort() : [];
+  const container = document.getElementById('whitelist');
+  container.innerHTML = '';
+  if (!hosts.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'No whitelisted hosts. @@ exceptions from filter lists are added automatically.';
+    container.appendChild(empty);
+    return;
+  }
+  for (const host of hosts) {
+    const row = document.createElement('div');
+    row.className = 'site-row';
+    const label = document.createElement('div');
+    label.className = 'host';
+    label.textContent = host;
+    const remove = document.createElement('button');
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', async () => {
+      const { whitelist = [] } = await browser.storage.local.get('whitelist');
+      await browser.storage.local.set({ whitelist: whitelist.filter((entry) => entry !== host) });
+      load();
+    });
+    row.append(label, remove);
+    container.appendChild(row);
+  }
+}
+
+document.getElementById('addWhitelist').addEventListener('click', async () => {
+  const input = document.getElementById('whitelistHost');
+  const host = input.value.trim().toLowerCase().replace(/^\*\.\./, '');
+  if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(host)) {
+    flash('Enter a valid hostname, e.g. example.com.');
+    return;
+  }
+  const { whitelist = [] } = await browser.storage.local.get('whitelist');
+  if (!whitelist.includes(host)) await browser.storage.local.set({ whitelist: [...whitelist, host] });
+  input.value = '';
+  load();
+});
+
 // Elements the user blocked with the right-click menu or the element picker.
 function renderBlockedElements(state) {
   const rules = state.customCosmetic || [];
@@ -316,7 +360,7 @@ browser.storage.onChanged.addListener((changes) => {
   if (
     changes.filterLists || changes.customFilterLists || changes.filterListStatus ||
     changes.cookieProtection || changes.scriptControl || changes.siteSettings ||
-    changes.disabledSites || changes.requestLog || changes.customCosmetic
+    changes.disabledSites || changes.requestLog || changes.customCosmetic || changes.whitelist
   ) {
     load();
   }

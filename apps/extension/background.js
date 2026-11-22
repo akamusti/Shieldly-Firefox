@@ -73,6 +73,7 @@ function parseFilterList(text, options) {
 
   const result = {
     domains: new Set(),
+    allowedDomains: new Set(),
     removeParams: new Set(),
     scopedRemoveParams: new Map(),
     regexRemoveParams: [],
@@ -115,7 +116,23 @@ function parseFilterList(text, options) {
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('!') || line.startsWith('[')) continue;
-    if (line.startsWith('@@')) continue;
+    // uBO section separators carry no rule; @@ network exceptions whitelist a
+    // hostname (mirrors parseAllowRule() in @privacy-shield/filter-parser).
+    if (line.startsWith('§') || line.startsWith('@@§')) continue;
+    if (line.startsWith('@@')) {
+      const body = line.slice(2).trim();
+      if (!body.includes('$') && !body.includes('#')) {
+        const m = /^(?:\|\|)?([a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\^?$/.exec(body);
+        if (m && m[1]) {
+          const domain = m[1].toLowerCase();
+          if (!result.allowedDomains.has(domain)) {
+            result.allowedDomains.add(domain);
+            result.ruleCount += 1;
+          }
+        }
+      }
+      continue;
+    }
 
     // Cosmetic classes: ## (specific/generic) and #@# (exception).
     const cosmetic = line.match(/^([^#]*?)#(@?)([?$%^]?)#(.+)$/);
@@ -299,6 +316,8 @@ function preprocessAggFilter(text) {
 }
 
 let blockedDomains = new Set();
+// Hosts whitelisted by @@ rules or the user's whitelist (uBO exception precedence).
+let allowedDomains = new Set();
 let cosmeticSelectors = [];
 let disabledSites = [];
 let siteSettings = {};
@@ -460,7 +479,17 @@ async function getLists() {
   return [...BUILTIN_LISTS, ...customFilterLists];
 }
 
+function isAllowedHost(host) {
+  if (!host || !allowedDomains.size) return false;
+  const parts = host.toLowerCase().split('.');
+  for (let i = 0; i < parts.length; i++) {
+    if (allowedDomains.has(parts.slice(i).join('.'))) return true;
+  }
+  return false;
+}
+
 function isBlockedHost(host) {
+  if (isAllowedHost(host)) return false;
   // Walk hostname suffixes for O(depth) lookup.
   const parts = host.split('.');
   for (let i = 0; i < parts.length; i++) {
@@ -518,8 +547,9 @@ async function fetchLists() {
   const scoped = new Map();
   const regexParams = [];
   const status = {};
-  const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '' } =
-    await browser.storage.local.get(['filterLists', 'customRulesText']);
+  const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '', whitelist = [] } =
+    await browser.storage.local.get(['filterLists', 'customRulesText', 'whitelist']);
+  const allowed = new Set(Array.isArray(whitelist) ? whitelist.map((d) => String(d).toLowerCase()).filter(Boolean) : []);
 
   const lists = await getLists();
   for (const list of lists) {
@@ -560,6 +590,7 @@ async function fetchLists() {
       const text = preprocessAggFilter(texts.join('\n'));
       const parsed = parseFilterList(text);
       for (const domain of parsed.domains) domains.add(domain);
+      for (const domain of parsed.allowedDomains) allowed.add(domain);
       for (const selector of parsed.cosmeticSelectors) selectors.add(selector);
       for (const selector of parsed.cosmeticGeneric) generic.add(selector);
       for (const selector of parsed.cosmeticExceptions) exceptions.add(selector);
@@ -592,6 +623,7 @@ async function fetchLists() {
     const dm = line.match(/^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,})\^/);
     if (dm && !hasRemoveParam) domains.add(dm[1].toLowerCase());
     const parsed = parseFilterList(line);
+    for (const domain of parsed.allowedDomains) allowed.add(domain);
     for (const domain of parsed.domains) domains.add(domain);
     for (const param of parsed.removeParams) params.add(param);
     for (const [host, list] of parsed.scopedRemoveParams) {
@@ -607,7 +639,8 @@ async function fetchLists() {
     }
   }
 
-  blockedDomains = domains;
+  allowedDomains = allowed;
+  blockedDomains = new Set([...domains].filter((domain) => !isAllowedHost(domain)));
   cosmeticSelectors = Array.from(selectors);
   globalRemoveParams = params;
   scopedRemoveParams = scoped;
@@ -735,7 +768,7 @@ browser.runtime.onInstalled.addListener(async () => {
 });
 
 browser.storage.onChanged.addListener((changes) => {
-  if (changes.filterLists || changes.customFilterLists || changes.customRulesText) {
+  if (changes.filterLists || changes.customFilterLists || changes.customRulesText || changes.whitelist) {
     fetchLists().then(updateAllBadges);
     return;
   }
@@ -893,7 +926,7 @@ browser.webRequest.onBeforeRequest.addListener(
       // Only block third-party requests so first-party site resources always load.
       const thirdParty = !!initiatorHost && !sameSite(initiatorHost, host);
       const blocked = thirdParty &&
-        ((settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script') ||
+        ((settingFor(initiatorHost, 'scriptControl', scriptControl) && details.type === 'script' && !isAllowedHost(host)) ||
           isBlockedHost(host));
       noteRequest(details.tabId, host, blocked);
       if (blocked) {
