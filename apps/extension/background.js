@@ -644,6 +644,30 @@ async function refreshState(keys) {
   if (!keys || keys.includes('strictDomains')) strictDomains = new Set(st.strictDomains || []);
 }
 
+// Short-lived cache: recompiling rules after a settings click used to
+// re-download every list, which made the background page work much harder.
+const LIST_CACHE_MS = 5 * 60 * 1000;
+const listTextCache = new Map();
+
+async function fetchListText(url) {
+  const cached = listTextCache.get(url);
+  if (cached && Date.now() - cached.at < LIST_CACHE_MS) return cached.text;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    if (/brotli-encoded/i.test(text)) {
+      throw new Error('List server requires brotli; the browser did not negotiate it');
+    }
+    listTextCache.set(url, { at: Date.now(), text });
+    return text;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchLists() {
   const selectors = new Set();
   const generic = new Set();
@@ -681,21 +705,7 @@ async function fetchLists() {
 
     try {
       const sources = Array.isArray(list.urls) && list.urls.length ? list.urls : [list.url];
-      const texts = await Promise.all(sources.map(async (url) => {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
-        try {
-          const res = await fetch(url, { signal: controller.signal });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const text = await res.text();
-          if (/brotli-encoded/i.test(text)) {
-            throw new Error('List server requires brotli; the browser did not negotiate it');
-          }
-          return text;
-        } finally {
-          clearTimeout(timeout);
-        }
-      }));
+      const texts = await Promise.all(sources.map((url) => fetchListText(url)));
       const text = preprocessAggFilter(texts.join('\n'));
       const parsed = parseFilterList(text);
       for (const domain of parsed.domains) domains.add(domain);
@@ -961,6 +971,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg && msg.type === 'refreshLists') {
+    listTextCache.clear();
     fetchLists().then(() => sendResponse({ ok: true }));
     return true;
   }

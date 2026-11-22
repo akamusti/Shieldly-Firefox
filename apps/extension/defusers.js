@@ -22,11 +22,9 @@
     'antiAdBlockerHandler', 'checkAdblockBait',
     'DisplayAcceptableAdIfAdblocked', 'adblockDetector',
   ];
-  const TIMER_PATTERNS = [
-    'ad_blocker_detector_modal', 'displayAdBlockedVideo',
-    'initializeAdblockDetection', 'showModal\\(\\)',
-    'chooseAction\\(\\)', 'disable adblocker',
-  ];
+  // One regex compiled ONCE at document_start. Compiling six regexes inside
+  // the setTimeout wrapper on every timer call delayed page scripts badly.
+  const TIMER_TEST = /ad_blocker_detector_modal|displayAdBlockedVideo|initializeAdblockDetection|showModal\(\)|chooseAction\(\)|disable adblocker/i;
 
   function valueOf(token) {
     switch (token) {
@@ -84,7 +82,9 @@
   window.setTimeout = function (fn, delay) {
     try {
       const source = String(fn);
-      if (TIMER_PATTERNS.some((pattern) => new RegExp(pattern, 'i').test(source))) return 0;
+      // Most callbacks are tiny; skip regex work unless they are short and
+      // could plausibly be a detector callback.
+      if (source.length < 8192 && TIMER_TEST.test(source)) return 0;
     } catch (e) {
       // Fall through to the native call.
     }

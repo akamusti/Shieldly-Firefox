@@ -572,11 +572,23 @@
   // modals on Letterboxd and similar sites): find the smallest element carrying
   // a known phrase and hide its fixed/absolute overlay ancestor too.
   let defuseTimer = null;
-  const defuseUntil = Date.now() + 15000;
+  let defuseObserver = null;
+  // Watch only the initial page build. Keeping a subtree observer alive on a
+  // busy page (Twitch, etc.) delayed other extensions and page scripts.
+  const defuseUntil = Date.now() + 8000;
+
+  function stopDefuseObserver() {
+    if (defuseObserver) {
+      defuseObserver.disconnect();
+      defuseObserver = null;
+    }
+  }
 
   function scrubDetectorScripts() {
     try {
-      for (const script of document.querySelectorAll('script:not([src])')) {
+      const scripts = document.querySelectorAll('script:not([src])');
+      for (let i = 0; i < scripts.length && i < 200; i += 1) {
+        const script = scripts[i];
         if (script.dataset.psScrubbed === '1') continue;
         const text = script.textContent || '';
         if (!text || text.length > 100000) continue;
@@ -592,9 +604,16 @@
 
   function defuseTextNotices() {
     try {
+      const body = document.body;
+      if (!body) return;
       scrubDetectorScripts();
-      const pageText = (document.body ? document.body.textContent : '').toLowerCase();
-      if (!matchesNotice(pageText.slice(0, 200000))) return;
+      const pageText = (body.textContent || '').toLowerCase();
+      // Cheap substring check on long pages: running four regexes over
+      // hundreds of kilobytes on every DOM change was the main slowdown.
+      const detected = pageText.length > 20000
+        ? ANTI_ADBLOCK_PHRASES.some((phrase) => pageText.includes(phrase))
+        : !!matchesNotice(pageText);
+      if (!detected) return;
 
       const noticed = [];
       for (const el of document.querySelectorAll('div,section,aside,dialog,[role="dialog"]')) {
@@ -612,15 +631,15 @@
         target.remove();
       }
 
-      // The dialog usually has a separate full-viewport scrim. Without
-      // removing it the page stays dark and uninteractive after the modal is
-      // gone — exactly what the user sees on Letterboxd.
+      // Remove the full-viewport scrim left behind by the modal. Measure the
+      // rect first (cheap) and only then read computed styles for the few
+      // elements that actually cover the viewport.
       for (const el of document.querySelectorAll('div,section')) {
         if (el.dataset.psDefused === '1') continue;
-        const style = getComputedStyle(el);
-        if (style.position !== 'fixed' && style.position !== 'absolute') continue;
         const rect = el.getBoundingClientRect();
         if (rect.width < window.innerWidth * 0.9 || rect.height < window.innerHeight * 0.9) continue;
+        const style = getComputedStyle(el);
+        if (style.position !== 'fixed' && style.position !== 'absolute') continue;
         el.style.setProperty('display', 'none', 'important');
         el.dataset.psDefused = '1';
       }
@@ -632,21 +651,27 @@
           if (/adblock|admiral|blocker/i.test(cls)) root.classList.remove(cls);
         }
       }
+      stopDefuseObserver();
     } catch (e) {
       // A restrictive page must still render normally.
     }
   }
 
   function scheduleDefuse() {
-    if (Date.now() > defuseUntil || defuseTimer) return;
+    if (Date.now() > defuseUntil) {
+      stopDefuseObserver();
+      return;
+    }
+    if (defuseTimer) return;
     defuseTimer = setTimeout(() => {
       defuseTimer = null;
       defuseTextNotices();
-    }, 250);
+    }, 400);
   }
 
   if (document.documentElement && typeof MutationObserver !== 'undefined') {
-    new MutationObserver(scheduleDefuse).observe(document.documentElement, { childList: true, subtree: true });
+    defuseObserver = new MutationObserver(scheduleDefuse);
+    defuseObserver.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   async function loadState() {
