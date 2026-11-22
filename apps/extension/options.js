@@ -306,13 +306,26 @@ function renderMyRules(rules) {
   }
 }
 
-for (const button of document.querySelectorAll('#dashTabs button')) {
-  button.addEventListener('click', () => {
-    const target = document.getElementById(button.dataset.scroll);
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
+function activatePane(name) {
+  for (const pane of document.querySelectorAll('.pane')) {
+    pane.classList.toggle('active', pane.dataset.pane === name);
+  }
+  for (const tab of document.querySelectorAll('#dashTabs button')) {
+    tab.classList.toggle('active', tab.dataset.pane === name);
+  }
+  // Keep the popup's deep link (#request-log) working.
+  const hash = name === 'log' ? '#request-log' : '';
+  if (location.hash !== hash) history.replaceState(null, '', `${location.pathname}${hash}`);
 }
+
+for (const button of document.querySelectorAll('#dashTabs button')) {
+  button.addEventListener('click', () => activatePane(button.dataset.pane));
+}
+const paneForHash = {
+  'request-log': 'log', 'filter-lists': 'lists', 'my-filters': 'rules',
+  'my-rules': 'rules', 'whitelist-panel': 'rules',
+}[location.hash.slice(1)];
+if (paneForHash) activatePane(paneForHash);
 
 // Rules listed in PROJECT_SPEC as "report unsupported filters to the user".
 function renderUnsupported(entries) {
@@ -324,10 +337,15 @@ function renderUnsupported(entries) {
     container.appendChild(empty);
     return;
   }
-  for (const entry of entries.slice(0, 50)) {
+  for (const entry of entries.slice(0, 6)) {
     const li = document.createElement('li');
     li.textContent = `${entry.list || 'list'}: ${entry.line} — ${(entry.options || []).join(', ')}`;
     container.appendChild(li);
+  }
+  if (entries.length > 6) {
+    const more = document.createElement('li');
+    more.textContent = `+ ${entries.length - 6} more (saved in storage)`;
+    container.appendChild(more);
   }
 }
 
@@ -421,13 +439,16 @@ function renderLog(entries) {
   lastLog = entries || [];
   logEl.innerHTML = '';
   const query = (document.getElementById('logFilter').value || '').trim().toLowerCase();
-  for (const entry of lastLog.slice(0, 100)) {
+  for (const entry of lastLog.slice(0, 40)) {
     const reason = entry.reason || 'block';
-    const rule = entry.rule ? ` [${entry.rule}]` : '';
-    const line = `${new Date(entry.time).toLocaleTimeString()} — ${reason}${rule} — ${entry.url}`;
+    const time = new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    let url = entry.url || '';
+    if (url.length > 90) url = `${url.slice(0, 87)}…`;
+    const line = `${time} · ${reason}${entry.rule ? ` · ${entry.rule}` : ''} · ${url}`;
     if (query && !line.toLowerCase().includes(query)) continue;
     const li = document.createElement('li');
     li.textContent = line;
+    li.title = `${reason}${entry.rule ? ` — ${entry.rule}` : ''}\n${entry.url}`;
     logEl.appendChild(li);
   }
 }

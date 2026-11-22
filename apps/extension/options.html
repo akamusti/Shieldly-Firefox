@@ -4,101 +4,153 @@
   <meta charset="utf-8" />
   <title>Privacy Shield — Advanced</title>
   <style>
-    body { max-width: 760px; margin: 24px auto; padding: 0 16px; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
-    h1 { font-size: 20px; }
-    h2 { font-size: 15px; margin-top: 26px; color: #7dd3fc; }
-    label { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: 14px; }
-    input[type="text"], input[type="url"] { flex: 1; background: #171a21; color: #e6e6e6; border: 1px solid #3a4050; border-radius: 6px; padding: 7px; }
-    textarea { width: 100%; min-height: 120px; background: #171a21; color: #e6e6e6; border: 1px solid #3a4050; border-radius: 6px; padding: 8px; }
-    button { background: #2a2f3a; color: #e6e6e6; border: 1px solid #3a4050; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
-    button:hover { background: #343b48; }
-    .muted { color: #9aa0a6; font-size: 12px; }
-    .list-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #1f242e; }
-    .list-row .meta { flex: 1; min-width: 0; }
-    .list-row .name { font-size: 14px; }
-    .list-row .status { font-size: 11px; color: #9aa0a6; word-break: break-all; }
-    .list-row .status.error { color: #fca5a5; }
-    .add-row { display: flex; gap: 8px; margin-top: 10px; }
-    .site-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid #1f242e; }
-    .site-row .host { flex: 1; font-size: 14px; }
-    .chip { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #1f2937; color: #9aa0a6; }
+    :root {
+      --bg: #0f1115;
+      --panel: #151920;
+      --line: #242a35;
+      --text: #e6e6e6;
+      --muted: #9299a5;
+      --accent: #7dd3fc;
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    * { box-sizing: border-box; }
+    body { max-width: 720px; margin: 20px auto; padding: 0 16px 48px; font: 13px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+    h1 { font-size: 18px; margin: 0; font-weight: 650; }
+    header .tag { color: var(--muted); font-size: 12px; }
+    h2 { font-size: 13px; margin: 20px 0 8px; color: var(--accent); font-weight: 600; }
+    h2:first-child { margin-top: 4px; }
+    p { margin: 4px 0 10px; }
+    .muted { color: var(--muted); font-size: 11px; }
+    .tabs { display: flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+    .tabs button { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--muted); padding: 7px 4px; border-radius: 7px; font: inherit; font-size: 12px; transition: color 160ms var(--ease-out), background 160ms var(--ease-out), transform 160ms var(--ease-out); }
+    .tabs button:hover { color: var(--text); }
+    .tabs button.active { background: #222938; color: var(--accent); }
+    .tabs button:active, button:active { transform: scale(0.97); }
+    .pane { display: none; padding-top: 6px; }
+    .pane.active { display: block; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+    .scroll { max-height: 250px; overflow: auto; scrollbar-width: thin; }
+    .scroll.short { max-height: 150px; }
+    label { display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 13px; }
+    input[type="text"], input[type="url"], input[type="search"] { flex: 1; min-width: 0; background: #10141a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12px; }
+    input:focus, textarea:focus, button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+    textarea { width: 100%; min-height: 90px; background: #10141a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font: 12px/1.5 ui-monospace, monospace; resize: vertical; }
+    button { background: #252b36; color: var(--text); border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; transition: background 160ms var(--ease-out), transform 160ms var(--ease-out); }
+    button:hover { background: #303846; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+    .row:last-child { border-bottom: 0; }
+    .row .meta { flex: 1; min-width: 0; }
+    .row .name { font-size: 13px; }
+    .row .status { font-size: 11px; color: var(--muted); word-break: break-word; }
+    .row .status.error { color: #fca5a5; }
+    .row .host { flex: 1; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+    .add-row { display: flex; gap: 8px; margin-top: 8px; }
+    .chip { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: #1f2937; color: var(--muted); white-space: nowrap; }
     .chip.on { background: #14351f; color: #86efac; }
     .chip.off { background: #3a1d1d; color: #fca5a5; }
+    details { margin-top: 10px; }
+    summary { cursor: pointer; color: var(--muted); font-size: 11px; }
+    #unsupportedRules { margin: 6px 0 0; padding-left: 16px; color: var(--muted); font-size: 11px; }
+    #log { margin: 8px 0 0; padding: 0; list-style: none; color: var(--muted); font: 11px/1.6 ui-monospace, monospace; }
+    #log li { padding: 3px 0; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (prefers-reduced-motion: reduce) {
+      .tabs button, button { transition: none; }
+    }
   </style>
 </head>
 <body>
-  <h1>Privacy Shield — Advanced</h1>
-  <nav id="dashTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 16px">
-    <button data-scroll="filter-lists">Filter lists</button>
-    <button data-scroll="my-filters">My Filters</button>
-    <button data-scroll="my-rules">My Rules</button>
-    <button data-scroll="whitelist-panel">Whitelist</button>
-    <button data-scroll="request-log">Request log</button>
+  <header><h1>Privacy Shield</h1><span class="tag">Advanced settings</span></header>
+
+  <nav id="dashTabs" class="tabs" aria-label="Settings sections">
+    <button data-pane="overview" class="active">Overview</button>
+    <button data-pane="lists">Lists</button>
+    <button data-pane="rules">Rules</button>
+    <button data-pane="privacy">Privacy</button>
+    <button data-pane="log">Log</button>
   </nav>
 
-  <h2 id="filter-lists">Filter lists</h2>
-  <div id="lists"></div>
-  <div class="add-row">
-    <input type="text" id="listName" placeholder="List name (optional)" />
-    <input type="url" id="listUrl" placeholder="https://example.com/filters.txt" />
-    <button id="addList">Add list</button>
-  </div>
-  <div class="add-row">
-    <button id="refreshLists">Refresh lists now</button>
-    <span id="listMessage" class="muted"></span>
-    <span id="quotaNotice" class="muted"></span>
-  </div>
+  <section class="pane active" data-pane="overview">
+    <h2>Site controls</h2>
+    <div class="muted">Per-site overrides. Reset returns a site to the global defaults.</div>
+    <div id="sites" class="card scroll"></div>
 
-  <h2>Privacy controls (global defaults)</h2>
-  <label><input type="checkbox" id="cookieProtection" /> Block third-party cookies</label>
-  <p class="muted">Only third-party subresources are affected. Page loads and logins always keep their cookies, so sites stay signed in.</p>
-  <label><input type="checkbox" id="scriptControl" /> Block third-party scripts</label>
-  <label><input type="checkbox" id="webRtcProtection" /> Prevent WebRTC IP leaks (relay mode)</label>
-  <label><input type="checkbox" id="antiBlockerDefusing" /> Defuse anti-adblock notices</label>
-  <label><input type="checkbox" id="strictBlocking" /> Strict blocking (block whole pages from $document rules)</label>
+    <h2>Backup</h2>
+    <div class="card">
+      <div class="row">
+        <div class="meta"><div class="name">Settings backup</div><div class="status">Saved locally — nothing is uploaded.</div></div>
+        <button id="exportSettings">Export</button>
+        <input type="file" id="importSettingsFile" accept="application/json,.json" style="max-width:150px" />
+        <button id="importSettings">Import</button>
+      </div>
+      <div id="backupMessage" class="muted"></div>
+    </div>
+  </section>
 
-  <h2 id="unsupported-rules">Unsupported rules</h2>
-  <p class="muted">Rules from your lists that this browser cannot enforce (for example <code>$replace</code> or <code>$redirect</code>).</p>
-  <ul id="unsupportedRules" class="muted" style="padding-left:16px;"></ul>
+  <section class="pane" data-pane="lists">
+    <h2 id="filter-lists">Filter lists</h2>
+    <div id="lists" class="card scroll"></div>
+    <div class="add-row">
+      <input type="text" id="listName" placeholder="Name (optional)" />
+      <input type="url" id="listUrl" placeholder="https://…/filters.txt" />
+      <button id="addList">Add</button>
+    </div>
+    <div class="add-row">
+      <button id="refreshLists">Refresh now</button>
+      <span id="listMessage" class="muted"></span>
+      <span id="quotaNotice" class="muted"></span>
+    </div>
 
-  <h2 id="site-controls">Site controls</h2>
-  <p class="muted">Per-site overrides. “Reset” removes the override and returns the site to global defaults.</p>
-  <div id="sites"></div>
+    <details>
+      <summary>Unsupported rules</summary>
+      <ul id="unsupportedRules"></ul>
+    </details>
+  </section>
 
-  <h2 id="my-filters">My Filters</h2>
-  <p class="muted">One rule per line, e.g. <code>||ads.example.com^</code></p>
-  <textarea id="customRules" placeholder="||ads.example.com^"></textarea>
-  <span id="ruleSummary" class="muted"></span>
-  <button id="save">Save</button>
-  <span id="saved" class="muted"></span>
+  <section class="pane" data-pane="rules">
+    <h2 id="my-filters">My Filters</h2>
+    <div class="muted">One rule per line, e.g. <code>||ads.example.com^</code>. <span id="ruleSummary"></span></div>
+    <textarea id="customRules" placeholder="||ads.example.com^"></textarea>
+    <div class="add-row"><button id="save">Save</button><span id="saved" class="muted"></span></div>
 
-  <h2 id="my-rules">My Rules</h2>
-  <p class="muted">Dynamic filtering rules created in the popup. “Remove” deletes a rule.</p>
-  <div id="myRules"></div>
+    <h2 id="my-rules">My Rules</h2>
+    <div class="muted">Dynamic rules from the popup.</div>
+    <div id="myRules" class="card scroll short"></div>
 
-  <h2 id="whitelist-panel">Whitelist</h2>
-  <p class="muted">Hosts that are never blocked, like uBO's <code>@@</code> exceptions. Subdomains are included.</p>
-  <div id="whitelist"></div>
-  <div class="add-row">
-    <input type="text" id="whitelistHost" placeholder="example.com" />
-    <button id="addWhitelist">Add host</button>
-  </div>
+    <h2 id="whitelist-panel">Whitelist</h2>
+    <div class="muted">Hosts that are never blocked. Subdomains included.</div>
+    <div id="whitelist" class="card scroll short"></div>
+    <div class="add-row">
+      <input type="text" id="whitelistHost" placeholder="example.com" />
+      <button id="addWhitelist">Add host</button>
+    </div>
 
-  <h2>Backup</h2>
-  <p class="muted">Export or restore your settings locally. No data is sent anywhere.</p>
-  <button id="exportSettings">Export settings</button>
-  <input type="file" id="importSettingsFile" accept="application/json,.json" />
-  <button id="importSettings">Import settings</button>
-  <span id="backupMessage" class="muted"></span>
+    <h2>Blocked elements</h2>
+    <div id="blockedElements" class="card scroll short"></div>
+  </section>
 
-  <h2>Blocked elements</h2>
-  <p class="muted">Elements you blocked with the right-click menu or the element picker. “Remove” brings the element back.</p>
-  <div id="blockedElements"></div>
+  <section class="pane" data-pane="privacy">
+    <div class="card">
+      <label><input type="checkbox" id="cookieProtection" /> Block third-party cookies</label>
+      <label><input type="checkbox" id="scriptControl" /> Block third-party scripts</label>
+      <label><input type="checkbox" id="webRtcProtection" /> Prevent WebRTC IP leaks</label>
+      <label><input type="checkbox" id="antiBlockerDefusing" /> Defuse anti-adblock notices</label>
+      <label><input type="checkbox" id="strictBlocking" /> Strict blocking ($document pages)</label>
+      <details>
+        <summary>What these do</summary>
+        <div class="muted">Cookies are stripped from third-party subresources only — page loads and logins keep theirs. WebRTC uses relay mode. Defusing hides blocker warnings and stops checker scripts. Strict blocking cancels whole pages.</div>
+      </details>
+    </div>
+  </section>
 
-  <h2 id="request-log">Request log</h2>
-  <input type="search" id="logFilter" placeholder="Filter URL, reason or rule" />
-  <button id="clearLog">Clear log</button>
-  <ul id="log" class="muted" style="max-height:260px;overflow:auto;padding-left:16px;"></ul>
+  <section class="pane" data-pane="log">
+    <h2 id="request-log">Request log</h2>
+    <div class="add-row">
+      <input type="search" id="logFilter" placeholder="Filter URL, reason or rule" />
+      <button id="clearLog">Clear</button>
+    </div>
+    <ul id="log" class="card scroll"></ul>
+  </section>
 
   <script src="options.js"></script>
 </body>
