@@ -87,6 +87,15 @@ test('collects enforceable extended options and reports the rest', () => {
   assert.deepEqual(Array.from(parsed.unsupportedRules, (r) => Array.from(r.options)), [['replace'], ['csp']]);
 });
 
+test('collects strict blocking domains from $document rules', () => {
+  const parsed = context.parseFilterList([
+    '||malware.example^$document',
+    '||tracker.example^$doc',
+    '||ads.example^$script',
+  ].join('\n'));
+  assert.deepEqual(Array.from(parsed.strictDomains).sort(), ['malware.example', 'tracker.example']);
+});
+
 test('applies global and parent-domain removeparam rules but preserves auth parameters', () => {
   context.hooks.setRules(
     ['utm_source'],

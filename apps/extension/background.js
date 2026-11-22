@@ -80,6 +80,7 @@ function parseFilterList(text, options) {
     cosmeticSelectors: new Set(),
     cosmeticGeneric: new Set(),
     cosmeticExceptions: new Set(),
+    strictDomains: new Set(),
     extendedRules: [],
     unsupportedRules: [],
     ruleCount: 0,
@@ -196,6 +197,7 @@ function parseFilterList(text, options) {
     // in either browser API, so they are reported instead of silently dropped.
     const extended = [];
     const impossible = [];
+    let strict = false;
     for (const option of listOptions) {
       const value = option.trim();
       const equals = value.indexOf('=');
@@ -203,6 +205,12 @@ function parseFilterList(text, options) {
       const optionValue = equals < 0 ? '' : value.slice(equals + 1).trim();
       if (name === 'csp' || name === 'removeheader') extended.push({ type: name, value: optionValue });
       if (name === 'replace' || name === 'redirect' || name === 'rename') impossible.push(name);
+      if (name === 'document' || name === 'doc') strict = true;
+    }
+    if (strict && scope) {
+      result.strictDomains.add(scope);
+      result.ruleCount += 1;
+      continue;
     }
     if (impossible.length || (extended.length && !scope)) {
       if (result.unsupportedRules.length < 30) {
@@ -383,6 +391,8 @@ let enabled = true;
 let cookieProtection = true;
 let scriptControl = false;
 let antiBlockerDefusing = true;
+let strictBlocking = true;
+let strictDomains = new Set();
 
 // $removeparam state. Firefox can rewrite a URL before it is sent, so the
 // tracking parameters are removed here instead of only hidden in the UI.
@@ -547,6 +557,15 @@ function isAllowedHost(host) {
   return false;
 }
 
+function isStrictHost(host) {
+  if (!strictDomains.size || isAllowedHost(host)) return false;
+  const parts = host.toLowerCase().split('.');
+  for (let i = 0; i < parts.length; i++) {
+    if (strictDomains.has(parts.slice(i).join('.'))) return true;
+  }
+  return false;
+}
+
 function isBlockedHost(host) {
   if (isAllowedHost(host)) return false;
   // Walk hostname suffixes for O(depth) lookup.
@@ -587,7 +606,7 @@ function isSiteDisabled(host) {
 
 async function refreshState(keys) {
   const st = await browser.storage.local.get([
-    'enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules', 'antiBlockerDefusing',
+    'enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules', 'antiBlockerDefusing', 'strictBlocking',
   ]);
   if (!keys || keys.includes('enabled')) enabled = st.enabled !== false;
   if (!keys || keys.includes('disabledSites')) disabledSites = st.disabledSites || [];
@@ -599,6 +618,8 @@ async function refreshState(keys) {
     dynamicRules = Array.isArray(st.dynamicRules) ? st.dynamicRules : [];
   }
   if (!keys || keys.includes('antiBlockerDefusing')) antiBlockerDefusing = st.antiBlockerDefusing !== false;
+  if (!keys || keys.includes('strictBlocking')) strictBlocking = st.strictBlocking !== false;
+  if (!keys || keys.includes('strictDomains')) strictDomains = new Set(st.strictDomains || []);
 }
 
 async function fetchLists() {
@@ -611,6 +632,7 @@ async function fetchLists() {
   const regexParams = [];
   const extended = new Map();
   const unsupported = [];
+  const strict = new Set();
   const status = {};
   const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '', whitelist = [] } =
     await browser.storage.local.get(['filterLists', 'customRulesText', 'whitelist']);
@@ -656,6 +678,7 @@ async function fetchLists() {
       const parsed = parseFilterList(text);
       for (const domain of parsed.domains) domains.add(domain);
       for (const domain of parsed.allowedDomains) allowed.add(domain);
+      for (const domain of parsed.strictDomains) strict.add(domain);
       for (const selector of parsed.cosmeticSelectors) selectors.add(selector);
       for (const selector of parsed.cosmeticGeneric) generic.add(selector);
       for (const selector of parsed.cosmeticExceptions) exceptions.add(selector);
@@ -695,6 +718,7 @@ async function fetchLists() {
     if (dm && !hasRemoveParam) domains.add(dm[1].toLowerCase());
     const parsed = parseFilterList(line);
     for (const domain of parsed.allowedDomains) allowed.add(domain);
+    for (const domain of parsed.strictDomains) strict.add(domain);
     for (const domain of parsed.domains) domains.add(domain);
     for (const param of parsed.removeParams) params.add(param);
     for (const [host, list] of parsed.scopedRemoveParams) {
@@ -718,6 +742,7 @@ async function fetchLists() {
 
   extendedRules = Array.from(extended.values());
   unsupportedRules = unsupported;
+  strictDomains = strict;
   allowedDomains = allowed;
   blockedDomains = new Set([...domains].filter((domain) => !isAllowedHost(domain)));
   cosmeticSelectors = Array.from(selectors);
@@ -733,6 +758,7 @@ async function fetchLists() {
     activeRemoveParamCount: params.size,
     extendedRules,
     unsupportedRules,
+    strictDomains: Array.from(strict),
   });
   await refreshState();
 }
@@ -874,7 +900,7 @@ browser.storage.onChanged.addListener((changes) => {
     return;
   }
   const relevant = Object.keys(changes).filter((k) =>
-    ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules', 'webRtcProtection', 'antiBlockerDefusing'].includes(k)
+    ['enabled', 'disabledSites', 'siteSettings', 'cosmeticSelectors', 'cookieProtection', 'scriptControl', 'dynamicRules', 'webRtcProtection', 'antiBlockerDefusing', 'strictBlocking'].includes(k)
   );
   if (relevant.length) {
     refreshState(relevant).then(updateAllBadges);
@@ -1020,6 +1046,12 @@ browser.webRequest.onBeforeRequest.addListener(
     if (!host) return {};
     const initiatorHost = initiatorHostOf(details);
     if (initiatorHost && isSiteDisabled(initiatorHost)) return {};
+
+    // Strict blocking ($document) cancels the whole page navigation.
+    if (details.type === 'main_frame' && strictBlocking && isStrictHost(host)) {
+      recordBlocked(details.url, initiatorHost, details.tabId);
+      return { cancel: true };
+    }
 
     // Anti-blocker defusing: block the page's own detection script. Mirrors
     // isAntiAdblockScript() in @privacy-shield/cosmetic-filter.

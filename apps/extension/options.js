@@ -22,6 +22,7 @@ const cookieProtection = document.getElementById('cookieProtection');
 const scriptControl = document.getElementById('scriptControl');
 const webRtcProtection = document.getElementById('webRtcProtection');
 const antiBlockerDefusing = document.getElementById('antiBlockerDefusing');
+const strictBlocking = document.getElementById('strictBlocking');
 const customRules = document.getElementById('customRules');
 const save = document.getElementById('save');
 const saved = document.getElementById('saved');
@@ -51,7 +52,7 @@ function chip(label, value) {
 async function getState() {
   return browser.storage.local.get([
     'filterLists', 'customFilterLists', 'filterListStatus', 'customRulesText',
-    'cookieProtection', 'scriptControl', 'webRtcProtection', 'antiBlockerDefusing', 'siteSettings', 'disabledSites', 'siteStats', 'requestLog',
+    'cookieProtection', 'scriptControl', 'webRtcProtection', 'antiBlockerDefusing', 'strictBlocking', 'siteSettings', 'disabledSites', 'siteStats', 'requestLog',
     'customCosmetic', 'whitelist', 'unsupportedRules',
   ]);
 }
@@ -62,6 +63,7 @@ async function load() {
   scriptControl.checked = state.scriptControl === true;
   webRtcProtection.checked = state.webRtcProtection === true;
   antiBlockerDefusing.checked = state.antiBlockerDefusing !== false;
+  strictBlocking.checked = state.strictBlocking !== false;
   customRules.value = state.customRulesText || '';
   renderLists(state);
   renderSites(state);
@@ -370,6 +372,7 @@ save.addEventListener('click', async () => {
     scriptControl: scriptControl.checked,
     webRtcProtection: webRtcProtection.checked,
     antiBlockerDefusing: antiBlockerDefusing.checked,
+    strictBlocking: strictBlocking.checked,
   });
   saved.textContent = 'Saved.';
   setTimeout(() => { saved.textContent = ''; }, 3000);
