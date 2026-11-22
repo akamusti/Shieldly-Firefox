@@ -32,8 +32,14 @@
   // Anti-blocker defusing: hide the overlay a site shows when it detects us.
   const ANTI_ADBLOCK_SELECTORS = [
     '#adblock-warning', '.adblock-notice', '.adblock-warning',
-    '.ad-blocker-notice', '[class*="adblock-overlay"]',
-    '[id*="adblock-notice"]', '[class*="anti-adblock"]',
+    '.ad-blocker-notice', '.modal--adblock', '.ab-notice',
+    '[class*="adblock"]', '[id*="adblock"]', '[class*="admiral"]',
+    '[id*="admiral"]', '[class*="anti-adblock"]',
+  ];
+  const ANTI_ADBLOCK_PHRASES = [
+    'disabling your adblocker', 'disable your adblocker',
+    'disable your ad blocker', 'adblocker detected',
+    'ad blocker detected', 'please disable your ad',
   ];
   const CHUNK_SIZE = 50;
   const MAX_SELECTORS_PER_HOST = 400;
@@ -542,6 +548,47 @@
     list.push(value);
   }
 
+  // Fallback for notices whose DOM has no predictable class (Admiral/Playwire
+  // modals on Letterboxd and similar sites): find the smallest element carrying
+  // a known phrase and hide its fixed/absolute overlay ancestor too.
+  let defuseTimer = null;
+  const defuseUntil = Date.now() + 15000;
+
+  function defuseTextNotices() {
+    try {
+      for (const el of document.querySelectorAll('div,section,aside,dialog,[role="dialog"]')) {
+        if (el.dataset.psDefused === '1') continue;
+        const text = (el.textContent || '').toLowerCase();
+        if (text.length > 1200 || !ANTI_ADBLOCK_PHRASES.some((phrase) => text.includes(phrase))) continue;
+        let node = el;
+        while (node && node !== document.body) {
+          if (getComputedStyle(node).position === 'fixed' || getComputedStyle(node).position === 'absolute') {
+            node.style.setProperty('display', 'none', 'important');
+            node.dataset.psDefused = '1';
+            break;
+          }
+          node = node.parentElement;
+        }
+        el.style.setProperty('display', 'none', 'important');
+        el.dataset.psDefused = '1';
+      }
+    } catch {
+      // A restrictive page must still render normally.
+    }
+  }
+
+  function scheduleDefuse() {
+    if (Date.now() > defuseUntil || defuseTimer) return;
+    defuseTimer = setTimeout(() => {
+      defuseTimer = null;
+      defuseTextNotices();
+    }, 250);
+  }
+
+  if (document.documentElement && typeof MutationObserver !== 'undefined') {
+    new MutationObserver(scheduleDefuse).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   async function loadState() {
     const stored = await api.storage.local.get([
       'enabled',
@@ -560,6 +607,10 @@
     const siteDisabled = (stored.disabledSites || []).includes(host) || site.enabled === false;
     const cosmeticEnabled = typeof site.cosmeticFiltering === 'boolean' ? site.cosmeticFiltering : true;
     state.active = stored.enabled !== false && !siteDisabled && cosmeticEnabled;
+    if (state.active && stored.antiBlockerDefusing !== false) {
+      defuseTextNotices();
+      scheduleDefuse();
+    }
 
     caches.generic = sanitizeCache(stored[GENERIC_CACHE_KEY]);
     caches.collapse = sanitizeCache(stored[COLLAPSE_CACHE_KEY]);

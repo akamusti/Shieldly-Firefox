@@ -19,4 +19,6 @@ test('content script hides anti-adblock overlays', () => {
   assert.ok(match, 'anti-adblock selector list exists');
   assert.ok(match[1].includes('#adblock-warning'));
   assert.ok(match[1].includes('.adblock-notice'));
+  assert.ok(match[1].includes('[class*="admiral"]'));
+  assert.ok(content.includes('disabling your adblocker'));
 });
