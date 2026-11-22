@@ -46,6 +46,10 @@
   <p class="muted">Only third-party subresources are affected. Page loads and logins always keep their cookies, so sites stay signed in.</p>
   <label><input type="checkbox" id="scriptControl" /> Block third-party scripts</label>
 
+  <h2 id="unsupported-rules">Unsupported rules</h2>
+  <p class="muted">Rules from your lists that this browser cannot enforce (for example <code>$replace</code> or <code>$redirect</code>).</p>
+  <ul id="unsupportedRules" class="muted" style="padding-left:16px;"></ul>
+
   <h2 id="site-controls">Site controls</h2>
   <p class="muted">Per-site overrides. “Reset” removes the override and returns the site to global defaults.</p>
   <div id="sites"></div>

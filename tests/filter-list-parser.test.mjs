@@ -72,6 +72,21 @@ test('parses @@ allow rules and ignores § section separators', () => {
   assert.equal(parsed.ruleCount, 3);
 });
 
+test('collects enforceable extended options and reports the rest', () => {
+  const parsed = context.parseFilterList([
+    '||ads.example^$csp=script-src none',
+    '||tracker.example^$removeheader=x-tracking-id',
+    '||ads.example^$replace=/foo/bar/',
+    '*$csp=default-src none',
+  ].join('\n'));
+
+  assert.deepEqual(Array.from(parsed.extendedRules, (r) => ({ ...r })).sort((a, b) => a.domain.localeCompare(b.domain)), [
+    { domain: 'ads.example', type: 'csp', value: 'script-src none' },
+    { domain: 'tracker.example', type: 'removeheader', value: 'x-tracking-id' },
+  ]);
+  assert.deepEqual(Array.from(parsed.unsupportedRules, (r) => Array.from(r.options)), [['replace'], ['csp']]);
+});
+
 test('applies global and parent-domain removeparam rules but preserves auth parameters', () => {
   context.hooks.setRules(
     ['utm_source'],

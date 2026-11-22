@@ -50,7 +50,7 @@ async function getState() {
   return browser.storage.local.get([
     'filterLists', 'customFilterLists', 'filterListStatus', 'customRulesText',
     'cookieProtection', 'scriptControl', 'siteSettings', 'disabledSites', 'siteStats', 'requestLog',
-    'customCosmetic', 'whitelist',
+    'customCosmetic', 'whitelist', 'unsupportedRules',
   ]);
 }
 
@@ -63,6 +63,7 @@ async function load() {
   renderSites(state);
   renderBlockedElements(state);
   renderWhitelist(state);
+  renderUnsupported(state.unsupportedRules || []);
   renderLog(state.requestLog || []);
 }
 
@@ -248,6 +249,23 @@ function renderSites(state) {
   }
 }
 
+// Rules listed in PROJECT_SPEC as "report unsupported filters to the user".
+function renderUnsupported(entries) {
+  const container = document.getElementById('unsupportedRules');
+  container.innerHTML = '';
+  if (!entries.length) {
+    const empty = document.createElement('li');
+    empty.textContent = 'None. All list rules are handled.';
+    container.appendChild(empty);
+    return;
+  }
+  for (const entry of entries.slice(0, 50)) {
+    const li = document.createElement('li');
+    li.textContent = `${entry.list || 'list'}: ${entry.line} — ${(entry.options || []).join(', ')}`;
+    container.appendChild(li);
+  }
+}
+
 // uBO-style whitelist: these hosts (and their subdomains) are never blocked.
 function renderWhitelist(state) {
   const hosts = Array.isArray(state.whitelist) ? state.whitelist.slice().sort() : [];
@@ -360,7 +378,8 @@ browser.storage.onChanged.addListener((changes) => {
   if (
     changes.filterLists || changes.customFilterLists || changes.filterListStatus ||
     changes.cookieProtection || changes.scriptControl || changes.siteSettings ||
-    changes.disabledSites || changes.requestLog || changes.customCosmetic || changes.whitelist
+    changes.disabledSites || changes.requestLog || changes.customCosmetic || changes.whitelist ||
+    changes.unsupportedRules
   ) {
     load();
   }

@@ -80,6 +80,8 @@ function parseFilterList(text, options) {
     cosmeticSelectors: new Set(),
     cosmeticGeneric: new Set(),
     cosmeticExceptions: new Set(),
+    extendedRules: [],
+    unsupportedRules: [],
     ruleCount: 0,
     unsupported: 0,
   };
@@ -188,6 +190,34 @@ function parseFilterList(text, options) {
 
     const domainMatch = /^\|\|([a-z0-9][a-z0-9.-]*\.[a-z]{2,})\^$/i.exec(pattern);
     const scope = domainMatch ? (domainMatch[1] || '').toLowerCase() : '';
+
+    // Extended options uBO supports. $csp/$removeheader are enforceable through
+    // header modification; $replace/$redirect/$rename have no safe equivalent
+    // in either browser API, so they are reported instead of silently dropped.
+    const extended = [];
+    const impossible = [];
+    for (const option of listOptions) {
+      const value = option.trim();
+      const equals = value.indexOf('=');
+      const name = (equals < 0 ? value : value.slice(0, equals)).toLowerCase();
+      const optionValue = equals < 0 ? '' : value.slice(equals + 1).trim();
+      if (name === 'csp' || name === 'removeheader') extended.push({ type: name, value: optionValue });
+      if (name === 'replace' || name === 'redirect' || name === 'rename') impossible.push(name);
+    }
+    if (impossible.length || (extended.length && !scope)) {
+      if (result.unsupportedRules.length < 30) {
+        result.unsupportedRules.push({ line, options: impossible.length ? impossible : extended.map((e) => e.type) });
+      }
+      result.unsupported += 1;
+      continue;
+    }
+    if (extended.length) {
+      for (const rule of extended) {
+        result.extendedRules.push({ domain: scope, type: rule.type, value: rule.value });
+      }
+      result.ruleCount += 1;
+      continue;
+    }
 
     if (removeParam !== null) {
       // A bare `$removeparam` removes every parameter; too destructive.
@@ -318,6 +348,10 @@ function preprocessAggFilter(text) {
 let blockedDomains = new Set();
 // Hosts whitelisted by @@ rules or the user's whitelist (uBO exception precedence).
 let allowedDomains = new Set();
+// $csp / $removeheader rules scoped to a request domain, and rules this
+// engine cannot enforce (shown in the options page).
+let extendedRules = [];
+let unsupportedRules = [];
 let cosmeticSelectors = [];
 let disabledSites = [];
 let siteSettings = {};
@@ -546,6 +580,8 @@ async function fetchLists() {
   const params = new Set();
   const scoped = new Map();
   const regexParams = [];
+  const extended = new Map();
+  const unsupported = [];
   const status = {};
   const { filterLists = { easylist: true, easyprivacy: true }, customRulesText = '', whitelist = [] } =
     await browser.storage.local.get(['filterLists', 'customRulesText', 'whitelist']);
@@ -606,6 +642,12 @@ async function fetchLists() {
       for (const entry of parsed.regexRemoveParams) {
         if (!regexParams.includes(entry)) regexParams.push(entry);
       }
+      for (const rule of parsed.extendedRules) {
+        extended.set(`${rule.domain}|${rule.type}|${rule.value}`, rule);
+      }
+      for (const rule of parsed.unsupportedRules) {
+        if (unsupported.length < 50) unsupported.push({ ...rule, list: list.id });
+      }
       status[list.id].updatedAt = Date.now();
       // Counts every rule the list contributes (block domains, cosmetic rules,
       // removeparam), not just `||domain^` lines.
@@ -637,8 +679,16 @@ async function fetchLists() {
     for (const entry of parsed.regexRemoveParams) {
       if (!regexParams.includes(entry)) regexParams.push(entry);
     }
+    for (const rule of parsed.extendedRules) {
+      extended.set(`${rule.domain}|${rule.type}|${rule.value}`, rule);
+    }
+    for (const rule of parsed.unsupportedRules) {
+      if (unsupported.length < 50) unsupported.push({ ...rule, list: 'custom' });
+    }
   }
 
+  extendedRules = Array.from(extended.values());
+  unsupportedRules = unsupported;
   allowedDomains = allowed;
   blockedDomains = new Set([...domains].filter((domain) => !isAllowedHost(domain)));
   cosmeticSelectors = Array.from(selectors);
@@ -652,6 +702,8 @@ async function fetchLists() {
     filterListStatus: status,
     activeRuleCount: domains.size,
     activeRemoveParamCount: params.size,
+    extendedRules,
+    unsupportedRules,
   });
   await refreshState();
 }
@@ -1029,13 +1081,42 @@ browser.webRequest.onBeforeSendHeaders.addListener(
   ['blocking', 'requestHeaders']
 );
 
+function hostMatchesSuffix(host, suffix) {
+  return host === suffix || host.endsWith(`.${suffix}`);
+}
+
+function applyExtendedHeaders(headers, host) {
+  if (!extendedRules.length) return headers;
+  let next = headers;
+  for (const rule of extendedRules) {
+    if (!hostMatchesSuffix(host, rule.domain)) continue;
+    const value = String(rule.value || '').trim();
+    if (!value || value.length > 600 || /[\r\n\0]/.test(value)) continue;
+    if (rule.type === 'csp') {
+      next = [...next, { name: 'Content-Security-Policy', value }];
+    } else {
+      const name = value.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
+      if (name) next = next.filter((h) => h.name.toLowerCase() !== name);
+    }
+  }
+  return next;
+}
+
 browser.webRequest.onHeadersReceived.addListener(
   (details) => {
-    if (!enabled || !isCookieGuarded(details) || !isThirdParty(details)) return {};
+    if (!enabled) return {};
+    const host = hostOf(details.url);
+    if (!host) return {};
+    let headers = details.responseHeaders || [];
     const initiatorHost = initiatorHostOf(details);
-    if (isSiteDisabled(initiatorHost)) return {};
-    if (!settingFor(initiatorHost, 'cookieProtection', cookieProtection)) return {};
-    const headers = (details.responseHeaders || []).filter((h) => h.name.toLowerCase() !== 'set-cookie');
+    if (
+      isCookieGuarded(details) && isThirdParty(details) && !isSiteDisabled(initiatorHost) &&
+      settingFor(initiatorHost, 'cookieProtection', cookieProtection)
+    ) {
+      headers = headers.filter((h) => h.name.toLowerCase() !== 'set-cookie');
+    }
+    if (isAllowedHost(host)) return { responseHeaders: headers };
+    headers = applyExtendedHeaders(headers, host);
     return { responseHeaders: headers };
   },
   { urls: ['<all_urls>'] },
