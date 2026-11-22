@@ -190,8 +190,10 @@
   // A blocked element is stored as a site-specific cosmetic rule
   // (`example.com##.ad`), the same format the filter lists use.
 
-  function ruleFor(selector) {
-    return `${host}##${selector}`;
+  // Shift-click in the picker creates a global rule; a normal click stays
+  // site-specific. Both are stored in the same `customCosmetic` list.
+  function ruleFor(selector, global) {
+    return global ? `##${selector}` : `${host}##${selector}`;
   }
 
   async function addCustomRule(rule) {
@@ -880,13 +882,18 @@
     e.preventDefault();
     e.stopPropagation();
     const selector = makeSelector(e.target);
+    const global = e.shiftKey === true;
     stopPicker();
     if (!selector) return;
-    const rule = ruleFor(selector);
+    const rule = ruleFor(selector, global);
     await addCustomRule(rule);
-    if (!state.specific.includes(selector)) state.specific.push(selector);
+    if (global) {
+      if (!state.generic.includes(selector)) state.generic.push(selector);
+    } else if (!state.specific.includes(selector)) {
+      state.specific.push(selector);
+    }
     render(postDomDone);
-    showToast('Element blocked', 'Undo', () => {
+    showToast(global ? 'Element blocked on all sites' : 'Element blocked', 'Undo', () => {
       removeCustomRule(rule);
     });
   }
