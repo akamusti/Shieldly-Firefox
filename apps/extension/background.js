@@ -816,10 +816,18 @@ function noteHidden(tabId, count) {
   scheduleFlush();
 }
 
-function recordBlocked(url, initiatorHost, tabId) {
+function recordBlocked(url, initiatorHost, tabId, detail) {
+  const info = detail || {};
   pendingBlocked += 1;
   if (initiatorHost) pendingSites[initiatorHost] = (pendingSites[initiatorHost] || 0) + 1;
-  pendingLog.push({ url, time: Date.now(), site: initiatorHost || null });
+  pendingLog.push({
+    url,
+    time: Date.now(),
+    site: initiatorHost || null,
+    reason: info.reason || 'block',
+    rule: typeof info.rule === 'string' ? info.rule.slice(0, 300) : null,
+    type: info.type || null,
+  });
   if (pendingLog.length > 200) pendingLog = pendingLog.slice(-200);
   if (typeof tabId === 'number' && tabId >= 0) {
     tabBlocked.set(tabId, (tabBlocked.get(tabId) || 0) + 1);
@@ -1049,7 +1057,7 @@ browser.webRequest.onBeforeRequest.addListener(
 
     // Strict blocking ($document) cancels the whole page navigation.
     if (details.type === 'main_frame' && strictBlocking && isStrictHost(host)) {
-      recordBlocked(details.url, initiatorHost, details.tabId);
+      recordBlocked(details.url, initiatorHost, details.tabId, { reason: 'strict', type: details.type });
       return { cancel: true };
     }
 
@@ -1060,7 +1068,7 @@ browser.webRequest.onBeforeRequest.addListener(
       !isSiteDisabled(initiatorHost) &&
       /blockadblock|anti-adblock|anti_adblock|adblock-detector/i.test(details.url)
     ) {
-      recordBlocked(details.url, initiatorHost, details.tabId);
+      recordBlocked(details.url, initiatorHost, details.tabId, { reason: 'anti-adblock', type: details.type });
       return { cancel: true };
     }
 
@@ -1077,7 +1085,11 @@ browser.webRequest.onBeforeRequest.addListener(
             isBlockedHost(host)));
       noteRequest(details.tabId, host, blocked);
       if (blocked) {
-        recordBlocked(details.url, initiatorHost, details.tabId);
+        recordBlocked(details.url, initiatorHost, details.tabId, {
+          reason: dynamic === 'block' ? 'strict' : 'block',
+          rule: dynamic === 'block' ? `dynamic:${dynamic}` : null,
+          type: details.type,
+        });
         return { cancel: true };
       }
     }

@@ -356,14 +356,24 @@ function renderBlockedElements(state) {
   }
 }
 
+let lastLog = [];
+
 function renderLog(entries) {
+  lastLog = entries || [];
   logEl.innerHTML = '';
-  for (const entry of entries.slice(0, 100)) {
+  const query = (document.getElementById('logFilter').value || '').trim().toLowerCase();
+  for (const entry of lastLog.slice(0, 100)) {
+    const reason = entry.reason || 'block';
+    const rule = entry.rule ? ` [${entry.rule}]` : '';
+    const line = `${new Date(entry.time).toLocaleTimeString()} — ${reason}${rule} — ${entry.url}`;
+    if (query && !line.toLowerCase().includes(query)) continue;
     const li = document.createElement('li');
-    li.textContent = `${new Date(entry.time).toLocaleTimeString()} — ${entry.url}`;
+    li.textContent = line;
     logEl.appendChild(li);
   }
 }
+
+document.getElementById('logFilter').addEventListener('input', () => renderLog(lastLog));
 
 save.addEventListener('click', async () => {
   await browser.storage.local.set({
