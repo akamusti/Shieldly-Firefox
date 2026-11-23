@@ -1,5 +1,5 @@
 /*
- * Privacy Shield popup — layout inspired by uBlock Origin's panel.
+ * Shieldly popup — layout inspired by uBlock Origin's panel.
  * Kept: hostname + power switch, one page-stat line, per-site module
  * switches, a compact tool ribbon and the global protection toggle.
  * Removed: the status caption line, the extra statistics lines, the

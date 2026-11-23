@@ -1,5 +1,5 @@
 /*
- * Privacy Shield — anti-blocker defusers (page / MAIN world, document_start).
+ * Shieldly — anti-blocker defusers (page / MAIN world, document_start).
  *
  * Mirrors the small, widely used subset of uBlock Origin / AdGuard scriptlets:
  *   set-constant, abort-on-property-read, prevent-setTimeout, noeval-if.

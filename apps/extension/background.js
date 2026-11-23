@@ -495,13 +495,13 @@ async function updateBadge(tabId) {
   const host = hostOf(tab && tab.url ? tab.url : '');
   const count = tabBlocked.get(tabId) || 0;
   if (!enabled || (host && isSiteDisabled(host))) {
-    setBadge(tabId, '', 'Privacy Shield — protection paused on this site');
+    setBadge(tabId, '', 'Shieldly — protection paused on this site');
     return;
   }
   setBadge(
     tabId,
     count > 0 ? compactCount(count) : '',
-    count > 0 ? `Privacy Shield — ${count.toLocaleString()} blocked on this page` : 'Privacy Shield',
+    count > 0 ? `Shieldly — ${count.toLocaleString()} blocked on this page` : 'Shieldly',
   );
 }
 
@@ -536,7 +536,7 @@ function resetTab(tabId) {
   pendingBlockedUrls.delete(tabId);
   tabDomains.delete(tabId);
   pendingBadges.delete(tabId);
-  setBadge(tabId, '', 'Privacy Shield');
+  setBadge(tabId, '', 'Shieldly');
 }
 
 function isBuiltinList(id) {
@@ -931,7 +931,7 @@ browser.runtime.onInstalled.addListener(async () => {
   await applyWebRtcProtection(webRtcProtection);
   await fetchLists();
   await updateAllBadges();
-  console.log('Privacy Shield (Firefox) installed.');
+  console.log('Shieldly (Firefox) installed.');
 });
 
 browser.storage.onChanged.addListener((changes) => {
@@ -978,7 +978,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // --- context menu: block element --------------------------------------------
-// The browser context menu offers "Privacy Shield → Block element", the same
+// The browser context menu offers "Shieldly → Block element", the same
 // entry uBlock Origin and AdGuard show. The browser does not report the
 // pointer position for a menu click, so the content script remembers the
 // element the user right-clicked and reports the frame it lives in.
@@ -1009,7 +1009,7 @@ function ensureContextMenus() {
       try {
         await upsertContextMenu({
           id: CONTEXT_MENU_ROOT,
-          title: 'Privacy Shield',
+          title: 'Shieldly',
           contexts: ['all'],
           documentUrlPatterns: CONTEXT_MENU_PATTERNS,
         });

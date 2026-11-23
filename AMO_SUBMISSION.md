@@ -7,7 +7,7 @@ release'de bulunur).
 ## Manifest durumu
 
 - `manifest_version: 3`
-- `browser_specific_settings.gecko.id`: `privacy-shield@privacy-shield`
+- `browser_specific_settings.gecko.id`: `shieldly@privacy-shield`
 - `browser_specific_settings.gecko.strict_min_version`: `140.0`
 - `browser_specific_settings.gecko.data_collection_permissions.required`: `["none"]`
 - `browser_specific_settings.gecko_android.strict_min_version`: `142.0`

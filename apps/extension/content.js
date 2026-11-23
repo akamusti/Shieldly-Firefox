@@ -1,5 +1,5 @@
 /*
- * Privacy Shield content script — cosmetic filtering.
+ * Shieldly content script — cosmetic filtering.
  *
  * Mirrors the three cosmetic classes implemented in
  * @privacy-shield/cosmetic-filter (extensions ship plain JS, so the logic is
@@ -18,7 +18,7 @@
  * separately from the blocked counter.
  *
  * The script also blocks single elements: the browser context menu offers
- * "Privacy Shield → Block element", and the element under the pointer is
+ * "Shieldly → Block element", and the element under the pointer is
  * turned into a site-specific cosmetic rule (`example.com##.ad`). The popup
  * offers the same action through the element picker.
  */

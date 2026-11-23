@@ -7,7 +7,7 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 
 test('manifest declares AMO-required metadata', () => {
   assert.equal(manifest.manifest_version, 3);
-  assert.equal(manifest.browser_specific_settings.gecko.id, 'privacy-shield@privacy-shield');
+  assert.equal(manifest.browser_specific_settings.gecko.id, 'shieldly@privacy-shield');
   assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, '140.0');
   assert.deepEqual(
     manifest.browser_specific_settings.gecko.data_collection_permissions.required,

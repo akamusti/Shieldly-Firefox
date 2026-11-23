@@ -399,7 +399,7 @@ function renderBlockedElements(state) {
   if (!rules.length) {
     const empty = document.createElement('p');
     empty.className = 'muted';
-    empty.textContent = 'No blocked elements yet. Right-click an element and choose “Privacy Shield → Block element”.';
+    empty.textContent = 'No blocked elements yet. Right-click an element and choose “Shieldly → Block element”.';
     blockedElements.appendChild(empty);
     return;
   }

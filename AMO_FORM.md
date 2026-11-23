@@ -1,21 +1,21 @@
 # AMO listed form — hazır alanlar
 
 Aşağıdaki değerleri Eklenti Geliştirici Merkezi formuna kopyalayabilirsin.
-Sürüm: 0.10.3 (AMO zip'i: `privacy-shield-firefox-0.10.3-amo.zip`).
+Sürüm: 0.11.0 (AMO zip'i: `shieldly-0.11.0-amo.zip`).
 
 ## İsim
 
 ```
-Privacy Shield
+Shieldly
 ```
 
 ## Eklenti URL'si (slug)
 
 ```
-privacy-shield
+shieldly
 ```
 
-Doluysa: `privacy-shield-adblock`.
+Doluysa: `shieldly-adblock`.
 
 ## Özet (250 karakter sınırı, ~130 karakter)
 
@@ -26,7 +26,7 @@ Gizlilik odaklı reklam ve izleyici engelleyici; yerel filtreleme, site kontroll
 ## Açıklama (250+ karakter, Markdown destekli)
 
 ```
-Privacy Shield, reklamları ve izleyicileri engelleyen, gizliliği önceleyen bir Firefox eklentisidir. Tüm filtreleme tarayıcınızda yapılır; hiçbir kullanıcı verisi harici sunucuya gönderilmez ve telemetri yoktur.
+Shieldly, reklamları ve izleyicileri engelleyen, gizliliği önceleyen bir Firefox eklentisidir. Tüm filtreleme tarayıcınızda yapılır; hiçbir kullanıcı verisi harici sunucuya gönderilmez ve telemetri yoktur.
 
 Öne çıkan özellikler:
 - EasyList, EasyPrivacy, AdGuard dil listeleri ve Peter Lowe's Blocklist desteği
@@ -40,7 +40,7 @@ Privacy Shield, reklamları ve izleyicileri engelleyen, gizliliği önceleyen bi
 
 İzinler: `webRequest` / `webRequestBlocking` istekleri engellemek ve başlıkları değiştirmek, `storage` ayarları yerel tutmak, `tabs` aktif sekmeyi okumak, `privacy` WebRTC politikasını ayarlamak, `menus` sağ tık menüsü, `<all_urls>` ise tüm sitelerde çalışmak için gereklidir.
 
-Filtre listeleri herkese açık kaynaklardan indirilir; bunlar yalnızca veridir ve eklenti uzaktan kod çalıştırmaz. Kaynak kod ve lisans: https://github.com/akamusti/privacy-shield-firefox (GPL-3.0).
+Filtre listeleri herkese açık kaynaklardan indirilir; bunlar yalnızca veridir ve eklenti uzaktan kod çalıştırmaz. Kaynak kod ve lisans: https://github.com/akamusti/Shieldly-Firefox (GPL-3.0).
 ```
 
 ## Onay kutuları
@@ -67,7 +67,7 @@ Not: Bu GitHub noreply adresidir. Gerçek bir destek adresin varsa onu yaz.
 ## Destek sitesi
 
 ```
-https://github.com/akamusti/privacy-shield-firefox/issues
+https://github.com/akamusti/Shieldly-Firefox/issues
 ```
 
 ## Lisans
@@ -94,7 +94,7 @@ Merhaba. Eklentiyi incelemek için ek bir hesap, abonelik veya donanım gerekmez
 
 Filtre listeleri herkese açık URL'lerden indirilir; bunlar yalnızca veridir, uzaktan kod çalıştırılmaz. Kullanıcı verisi toplanmaz veya gönderilmez. İzin gerekçeleri AMO_SUBMISSION.md dosyasındadır.
 
-Kaynak kod: https://github.com/akamusti/privacy-shield-firefox
+Kaynak kod: https://github.com/akamusti/Shieldly-Firefox
 ```
 
 Bu not yalnızca sana ve inceleyicilere görünür.
@@ -106,16 +106,16 @@ Bu not yalnızca sana ve inceleyicilere görünür.
 ## Name
 
 ```
-Privacy Shield
+Shieldly
 ```
 
 ## Add-on URL (slug)
 
 ```
-privacy-shield
+shieldly
 ```
 
-Fallback: `privacy-shield-adblock`.
+Fallback: `shieldly-adblock`.
 
 ## Summary (250 character limit, ~110 characters)
 
@@ -126,7 +126,7 @@ Privacy-focused ad and tracker blocker with local filtering, site controls, dyna
 ## Description (250+ characters, Markdown supported)
 
 ```
-Privacy Shield is a privacy-first Firefox extension that blocks ads and trackers. All filtering happens locally in your browser; no user data is sent to any server and there is no telemetry.
+Shieldly is a privacy-first Firefox extension that blocks ads and trackers. All filtering happens locally in your browser; no user data is sent to any server and there is no telemetry.
 
 Highlights:
 - EasyList, EasyPrivacy, AdGuard language filters and Peter Lowe's Blocklist
@@ -140,7 +140,7 @@ Highlights:
 
 Permissions: `webRequest` / `webRequestBlocking` block requests and modify headers, `storage` keeps settings locally, `tabs` reads the active tab, `privacy` sets the WebRTC policy, `menus` adds the context-menu entry, and `<all_urls>` is required to work on every site.
 
-Filter lists are downloaded from public sources as data only; the extension never executes remote code. Source and license: https://github.com/akamusti/privacy-shield-firefox (GPL-3.0).
+Filter lists are downloaded from public sources as data only; the extension never executes remote code. Source and license: https://github.com/akamusti/Shieldly-Firefox (GPL-3.0).
 ```
 
 ## Checkboxes
@@ -167,7 +167,7 @@ Note: this is a GitHub noreply address. Replace it with your real support addres
 ## Support website
 
 ```
-https://github.com/akamusti/privacy-shield-firefox/issues
+https://github.com/akamusti/Shieldly-Firefox/issues
 ```
 
 ## License
@@ -194,7 +194,7 @@ Suggested test steps:
 
 Filter lists are fetched from public URLs as data only; no remote code is executed and no user data is collected or transmitted. Permission justifications are documented in AMO_SUBMISSION.md.
 
-Source: https://github.com/akamusti/privacy-shield-firefox
+Source: https://github.com/akamusti/Shieldly-Firefox
 ```
 
 These notes are visible only to you and the reviewers.

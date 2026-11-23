@@ -1,4 +1,4 @@
-# Copilot Instructions — Privacy Shield Firefox
+# Copilot Instructions — Shieldly Firefox
 
 Firefox adapter repo (WebExtensions). Core packages come from `privacy-shield-core`.
 

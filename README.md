@@ -1,7 +1,6 @@
 # privacy-shield-firefox
 
-Firefox (WebExtensions, Manifest V3) adapter and extension for **Privacy
-Shield** — an advanced privacy & adblock engine. Current version: **0.10.3**.
+Firefox (WebExtensions, Manifest V3) adapter and extension for **Shieldly** — an advanced privacy & adblock engine. Current version: **0.11.0**.
 
 ## Status
 
