@@ -98,3 +98,103 @@ Kaynak kod: https://github.com/akamusti/privacy-shield-firefox
 ```
 
 Bu not yalnızca sana ve inceleyicilere görünür.
+
+---
+
+# AMO listing form — English fields
+
+## Name
+
+```
+Privacy Shield
+```
+
+## Add-on URL (slug)
+
+```
+privacy-shield
+```
+
+Fallback: `privacy-shield-adblock`.
+
+## Summary (250 character limit, ~110 characters)
+
+```
+Privacy-focused ad and tracker blocker with local filtering, site controls, dynamic rules and no data collection.
+```
+
+## Description (250+ characters, Markdown supported)
+
+```
+Privacy Shield is a privacy-first Firefox extension that blocks ads and trackers. All filtering happens locally in your browser; no user data is sent to any server and there is no telemetry.
+
+Highlights:
+- EasyList, EasyPrivacy, AdGuard language filters and Peter Lowe's Blocklist
+- Network and cosmetic filtering, `@@` exceptions and a user whitelist
+- `$removeparam` (including regex), `$csp` and `$removeheader` support
+- Per-site Allow / Block / Noop dynamic filtering rules
+- Third-party cookie and script controls, WebRTC relay mode, `$document` strict blocking
+- Local scriptlets and procedural text rules that remove anti-adblock notices
+- Element picker (context menu + popup), request log, settings backup (JSON)
+- Dark, tabbed and compact settings page
+
+Permissions: `webRequest` / `webRequestBlocking` block requests and modify headers, `storage` keeps settings locally, `tabs` reads the active tab, `privacy` sets the WebRTC policy, `menus` adds the context-menu entry, and `<all_urls>` is required to work on every site.
+
+Filter lists are downloaded from public sources as data only; the extension never executes remote code. Source and license: https://github.com/akamusti/privacy-shield-firefox (GPL-3.0).
+```
+
+## Checkboxes
+
+- `This add-on is experimental` → leave unchecked
+- `This add-on requires payment, a paid service/software, or additional hardware` → leave unchecked
+- `Does this add-on have a custom privacy policy?` → leave unchecked (no data is collected)
+
+## Categories (max 3)
+
+- [x] **Security & Privacy**
+- [x] **Tools**
+
+Leave all other categories unchecked.
+
+## Support email
+
+```
+akamusti@users.noreply.github.com
+```
+
+Note: this is a GitHub noreply address. Replace it with your real support address if you have one.
+
+## Support website
+
+```
+https://github.com/akamusti/privacy-shield-firefox/issues
+```
+
+## License
+
+Select:
+
+```
+GNU General Public License v3.0 only
+```
+
+(GPL-3.0-only)
+
+## Notes for reviewers
+
+```
+Hello. No account, subscription or extra hardware is needed to review this add-on.
+
+Suggested test steps:
+1) Install the add-on and verify that ad/tracker requests are blocked on a news site while the page loads normally.
+2) Try the popup power button, the Cookies / Scripts / Hide ads switches and the Dynamic filtering (A / B / N) cells.
+3) Add `||example.com^` under Settings > My Filters and confirm requests to example.com are blocked.
+4) Verify that Settings > Backup exports and imports settings locally.
+5) On a site that shows an anti-adblock notice (e.g. Letterboxd), confirm the notice disappears and the page stays interactive.
+
+Filter lists are fetched from public URLs as data only; no remote code is executed and no user data is collected or transmitted. Permission justifications are documented in AMO_SUBMISSION.md.
+
+Source: https://github.com/akamusti/privacy-shield-firefox
+```
+
+These notes are visible only to you and the reviewers.
