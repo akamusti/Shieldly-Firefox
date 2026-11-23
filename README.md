@@ -1,4 +1,6 @@
-# privacy-shield-firefox
+# Shieldly Firefox
+
+Repository: https://github.com/akamusti/Shieldly-Firefox — local folder: `privacy-shield-firefox`.
 
 Firefox (WebExtensions, Manifest V3) adapter and extension for **Shieldly** — an advanced privacy & adblock engine. Current version: **0.11.0**.
 
@@ -10,7 +12,7 @@ Firefox (WebExtensions, Manifest V3) adapter and extension for **Shieldly** — 
 - Phase 3 — Advanced Protection & Polish: complete
 - Ongoing work: AMO submission readiness and compatibility
 
-See `../privacy-shield-core/ROADMAP.md` for the overall plan.
+See [`ROADMAP.md`](https://github.com/akamusti/Shieldly-Core/blob/main/ROADMAP.md) in the core repository for the overall plan.
 
 ## Features
 
