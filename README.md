@@ -54,7 +54,8 @@ runtime. Keep both in sync when changing a contract.
 The manifest declares `data_collection_permissions.required: ["none"]`,
 `strict_min_version: 140.0` and `gecko_android.strict_min_version: 142.0`, as
 required for new add-ons on addons.mozilla.org. Permission justifications and
-upload steps are in [`AMO_SUBMISSION.md`](AMO_SUBMISSION.md). Validate locally:
+upload steps are in [`AMO_SUBMISSION.md`](AMO_SUBMISSION.md); ready-to-paste
+listing fields are in [`AMO_FORM.md`](AMO_FORM.md). Validate locally:
 
 ```bash
 npm run lint:amo
