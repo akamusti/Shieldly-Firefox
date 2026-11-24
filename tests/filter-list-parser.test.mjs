@@ -148,3 +148,13 @@ test('accepts generic removeparam rules without a URL pattern', () => {
   assert.deepEqual(Array.from(parsed.removeParams), ['campaign']);
   assert.equal(parsed.unsupported, 0);
 });
+
+test('built-in lists do not depend on the AGPL-licensed Helium service', () => {
+  assert.equal(source.includes('services.helium.imput.net'), false);
+  assert.ok(source.includes(
+    "url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy-removeparam.txt'",
+  ));
+  assert.ok(source.includes(
+    "url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext'",
+  ));
+});

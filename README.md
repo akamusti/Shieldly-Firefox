@@ -90,7 +90,7 @@ small "bait" ad elements visible on purpose. If a page misbehaves, disable
 - **privacy-shield-core** — shared filtering engine and packages
 - **adblock-rust** — underlying Rust engine
 - **EasyList / EasyPrivacy**, **AdGuard**, **Peter Lowe's Blocklist** — filter lists
-- **Helium filter service** — hosts default tracking-parameter feeds
+- **uBlock Origin / uAssets** — tracking-parameter feed (GPLv3)
 - Firefox **WebExtensions** APIs (`webRequest`, `privacy`, `menus`) — filtering
   and privacy controls
 - **uBlock Origin / AdGuard** — filter syntax and scriptlet techniques

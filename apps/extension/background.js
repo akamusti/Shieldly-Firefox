@@ -1,8 +1,9 @@
 const BUILTIN_LISTS = [
   { id: 'easylist', name: 'EasyList', url: 'https://easylist.to/easylist/easylist.txt' },
   { id: 'easyprivacy', name: 'EasyPrivacy', url: 'https://easylist.to/easylist/easyprivacy.txt' },
-  { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection', url: 'https://services.helium.imput.net/ubo/adguard-spyware-url/93b535a2/55a42892/privacy-removeparam.txt' },
-  { id: 'peter-lowe-blocklist', name: "Peter Lowe's Blocklist", url: 'https://services.helium.imput.net/ubo/plowe-0/37f0810b/c20e4257/filters.txt' },
+  // Upstream sources, not the AGPL-licensed Helium mirror.
+  { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy-removeparam.txt' },
+  { id: 'peter-lowe-blocklist', name: "Peter Lowe's Blocklist", url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext' },
   { id: 'annoyances', name: 'AdGuard Annoyances filter', url: 'https://filters.adtidy.org/extension/chromium/filters/14.txt' },
   {
     id: 'adguard-spyware',
