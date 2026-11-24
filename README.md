@@ -2,7 +2,7 @@
 
 Repository: https://github.com/akamusti/Shieldly-Firefox — local folder: `privacy-shield-firefox`.
 
-Firefox (WebExtensions, Manifest V3) adapter and extension for **Shieldly** — an advanced privacy & adblock engine. Current version: **0.11.0**.
+Firefox (WebExtensions, Manifest V3) adapter and extension for **Shieldly** — an advanced privacy & adblock engine. Current version: **0.11.1**.
 
 ## Status
 

@@ -1,7 +1,7 @@
 # AMO listed form — hazır alanlar
 
 Aşağıdaki değerleri Eklenti Geliştirici Merkezi formuna kopyalayabilirsin.
-Sürüm: 0.11.0 (AMO zip'i: `shieldly-0.11.0-amo.zip`).
+Sürüm: 0.11.1 (AMO zip'i: `shieldly-0.11.1-amo.zip`).
 
 ## İsim
 
