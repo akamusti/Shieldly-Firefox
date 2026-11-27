@@ -13,9 +13,11 @@ Firefox (WebExtensions, Manifest V3) adapter and extension for **Shieldly** — 
 - Ongoing work: AMO submission readiness and compatibility
 
 See [`ROADMAP.md`](https://github.com/akamusti/Shieldly-Core/blob/main/ROADMAP.md) in the core repository for the overall plan.
-YouTube filtering (YTROADMAP Phase 1) is **on by default** using uBO's
-maintained rule source, with a per-site "YouTube ads" switch in the popup.
-In-video pre-roll/mid-roll ads are not covered by this rule-based phase.
+YouTube filtering is **on by default** using uBO's maintained rule source,
+with a per-site "YouTube ads" switch in the popup. Isolated MAIN-world modules
+under `apps/extension/site-adapters/` handle player-response ad skipping
+(Phase 2) and anti-adblock notice defusing (Phase 4). These layers are fragile
+and need real-browser smoke testing after YouTube updates.
 
 ## Features
 
