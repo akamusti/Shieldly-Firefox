@@ -1,9 +1,14 @@
+const BASE_LIST_IDS = ['easylist', 'easyprivacy', 'privacy-removeparam', 'peter-lowe-blocklist', 'annoyances', 'adguard-spyware'];
+// Shown with the core lists but off until the user opts in (YTROADMAP Faz 1).
+const OPTIONAL_LIST_IDS = ['ubo-filters'];
+
 const BUILTIN_LISTS = [
   { id: 'easylist', name: 'EasyList (ads)' },
   { id: 'easyprivacy', name: 'EasyPrivacy (trackers)' },
   { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection' },
   { id: 'peter-lowe-blocklist', name: "Peter Lowe's Blocklist" },
   { id: 'annoyances', name: 'AdGuard Annoyances filter' },
+  { id: 'ubo-filters', name: 'uBO filters (YouTube + quick fixes)' },
   { id: 'adguard-spyware', name: 'AdGuard Spyware filter' },
   { id: 'russian', name: 'AdGuard Russian filter' },
   { id: 'german', name: 'AdGuard German filter' },
@@ -82,13 +87,13 @@ function renderLists(state) {
   const status = state.filterListStatus || {};
   listsEl.innerHTML = '';
 
-  const baseLists = BUILTIN_LISTS.filter((l) => ['easylist', 'easyprivacy', 'privacy-removeparam', 'peter-lowe-blocklist', 'annoyances', 'adguard-spyware'].includes(l.id));
+  const baseLists = BUILTIN_LISTS.filter((l) => [...BASE_LIST_IDS, ...OPTIONAL_LIST_IDS].includes(l.id));
   const languageLists = BUILTIN_LISTS.filter((l) => !baseLists.includes(l));
 
   function appendRow(container, list, builtin) {
     const enabled = builtin
       ? filterLists[list.id] === undefined
-        ? baseLists.some((base) => base.id === list.id)
+        ? BASE_LIST_IDS.includes(list.id)
         : filterLists[list.id] !== false
       : list.enabled !== false;
     const row = document.createElement('div');

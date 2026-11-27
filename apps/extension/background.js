@@ -5,6 +5,9 @@ const BUILTIN_LISTS = [
   { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy-removeparam.txt' },
   { id: 'peter-lowe-blocklist', name: "Peter Lowe's Blocklist", url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext' },
   { id: 'annoyances', name: 'AdGuard Annoyances filter', url: 'https://filters.adtidy.org/extension/chromium/filters/14.txt' },
+  // uBO's own list (GPL-3.0): YouTube-specific rules + quick fixes. Opt-in —
+  // it also carries scriptlets/extended syntax reported as unsupported.
+  { id: 'ubo-filters', name: 'uBO filters (YouTube + quick fixes)', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt' },
   {
     id: 'adguard-spyware',
     name: 'AdGuard Spyware filter',
