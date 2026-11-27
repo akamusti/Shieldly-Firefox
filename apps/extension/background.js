@@ -997,6 +997,17 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (msg && msg.type === 'youtubeScriptletStatus') {
+    (async () => {
+      try {
+        await browser.storage.local.set({ youtubeScriptletActive: msg.active === true });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false });
+      }
+    })();
+    return true;
+  }
   if (msg && msg.type === 'getTabStats') {
     const tabId = typeof msg.tabId === 'number' ? msg.tabId : sender && sender.tab ? sender.tab.id : -1;
     sendResponse(tabStats(tabId));

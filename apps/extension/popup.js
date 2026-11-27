@@ -16,6 +16,7 @@ const els = {
   pageBlocked: document.getElementById('pageBlocked'),
   pagePct: document.getElementById('pagePct'),
   pageHidden: document.getElementById('pageHidden'),
+  scriptletStatus: document.getElementById('scriptletStatus'),
   siteCookies: document.getElementById('siteCookies'),
   siteScripts: document.getElementById('siteScripts'),
   siteCosmetic: document.getElementById('siteCosmetic'),
@@ -130,6 +131,12 @@ function render() {
   els.pageBlocked.textContent = blocked.toLocaleString();
   els.pagePct.textContent = total > 0 ? ` (${percent}%)` : '';
   els.pageHidden.textContent = (stats.hidden || 0).toLocaleString();
+  els.scriptletStatus.hidden = !isYouTubeHost(host);
+  if (!els.scriptletStatus.hidden) {
+    els.scriptletStatus.textContent = state.youtubeScriptletActive === true
+      ? 'Player scriptlet: aktif'
+      : 'Player scriptlet: aktif değil — sayfayı yenileyin';
+  }
 
   setSwitch(els.siteCookies, effective(site, 'cookieProtection', cookieProtection));
   setSwitch(els.siteScripts, effective(site, 'scriptControl', scriptControl));
@@ -190,7 +197,7 @@ function renderFirewall() {
 
 async function load() {
   state = await api.storage.local.get([
-    'enabled', 'disabledSites', 'siteSettings', 'siteStats', 'siteHiddenStats',
+    'enabled', 'disabledSites', 'siteSettings', 'siteStats', 'siteHiddenStats', 'youtubeScriptletActive',
     'cookieProtection', 'scriptControl', 'dynamicRules',
   ]);
   await fetchStats();
@@ -342,7 +349,7 @@ api.storage.onChanged.addListener((changes, area) => {
   if (
     changes.enabled || changes.disabledSites || changes.siteSettings ||
     changes.cookieProtection || changes.scriptControl || changes.dynamicRules ||
-    changes.siteHiddenStats
+    changes.siteHiddenStats || changes.youtubeScriptletActive
   ) {
     load();
   }

@@ -40,6 +40,25 @@
     })();
   }
 
+  if (/(^|\.)youtube\.com$|^youtu\.be$/.test(location.hostname)) {
+    const reportScriptlet = () => {
+      (async () => {
+        try {
+          const active = !!(document.documentElement &&
+            document.documentElement.getAttribute('data-shieldly-youtube') === 'active');
+          await api.runtime.sendMessage({ type: 'youtubeScriptletStatus', active });
+        } catch (e) {
+          // Background not available; the diagnostic is best-effort.
+        }
+      })();
+    };
+    window.addEventListener('message', (event) => {
+      const data = event && event.data;
+      if (data && data.source === 'shieldly' && data.type === 'youtube-ready') reportScriptlet();
+    }, true);
+    setTimeout(reportScriptlet, 1000);
+  }
+
   const STYLE_ID = 'privacy-shield-cosmetic';
   const GENERIC_CACHE_KEY = 'cosmeticCache';
   const COLLAPSE_CACHE_KEY = 'collapseCache';
