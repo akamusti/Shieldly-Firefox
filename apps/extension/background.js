@@ -5,8 +5,9 @@ const BUILTIN_LISTS = [
   { id: 'privacy-removeparam', name: 'AdGuard/uBO URL Tracking Protection', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy-removeparam.txt' },
   { id: 'peter-lowe-blocklist', name: "Peter Lowe's Blocklist", url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext' },
   { id: 'annoyances', name: 'AdGuard Annoyances filter', url: 'https://filters.adtidy.org/extension/chromium/filters/14.txt' },
-  // uBO's own list (GPL-3.0): YouTube-specific rules + quick fixes. Opt-in —
-  // it also carries scriptlets/extended syntax reported as unsupported.
+  // uBO's own list (GPL-3.0): YouTube-specific rules + quick fixes. On by
+  // default so YouTube filtering starts right after install. Unsupported
+  // scriptlet/extended rules are reported, never treated as DNR blocks.
   { id: 'ubo-filters', name: 'uBO filters (YouTube + quick fixes)', url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt' },
   {
     id: 'adguard-spyware',
@@ -690,7 +691,7 @@ async function fetchLists() {
 
   const lists = await getLists();
   for (const list of lists) {
-    const defaultEnabled = ['easylist', 'easyprivacy', 'privacy-removeparam', 'peter-lowe-blocklist', 'annoyances', 'adguard-spyware'];
+    const defaultEnabled = ['easylist', 'easyprivacy', 'privacy-removeparam', 'peter-lowe-blocklist', 'annoyances', 'ubo-filters', 'adguard-spyware'];
     const listEnabled = isBuiltinList(list.id)
       ? filterLists[list.id] === undefined
         ? defaultEnabled.includes(list.id)

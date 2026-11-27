@@ -1,6 +1,5 @@
-const BASE_LIST_IDS = ['easylist', 'easyprivacy', 'privacy-removeparam', 'peter-lowe-blocklist', 'annoyances', 'adguard-spyware'];
-// Shown with the core lists but off until the user opts in (YTROADMAP Faz 1).
-const OPTIONAL_LIST_IDS = ['ubo-filters'];
+// On out of the box so YouTube filtering starts on install (YTROADMAP Faz 1).
+const BASE_LIST_IDS = ['easylist', 'easyprivacy', 'privacy-removeparam', 'peter-lowe-blocklist', 'annoyances', 'ubo-filters', 'adguard-spyware'];
 
 const BUILTIN_LISTS = [
   { id: 'easylist', name: 'EasyList (ads)' },
@@ -87,7 +86,7 @@ function renderLists(state) {
   const status = state.filterListStatus || {};
   listsEl.innerHTML = '';
 
-  const baseLists = BUILTIN_LISTS.filter((l) => [...BASE_LIST_IDS, ...OPTIONAL_LIST_IDS].includes(l.id));
+  const baseLists = BUILTIN_LISTS.filter((l) => BASE_LIST_IDS.includes(l.id));
   const languageLists = BUILTIN_LISTS.filter((l) => !baseLists.includes(l));
 
   function appendRow(container, list, builtin) {

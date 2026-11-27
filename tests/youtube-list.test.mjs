@@ -12,7 +12,7 @@ function constArray(source, name) {
   return vm.runInNewContext(`${match[1]};`);
 }
 
-test('background and options ship the same opt-in uBO YouTube source', () => {
+test('background and options ship the same default-on uBO YouTube source', () => {
   const inBackground = constArray(background, 'BUILTIN_LISTS');
   const inOptions = constArray(options, 'BUILTIN_LISTS');
   const ubo = inBackground.find((list) => list.id === 'ubo-filters');
@@ -21,10 +21,9 @@ test('background and options ship the same opt-in uBO YouTube source', () => {
   assert.ok(inOptions.some((list) => list.id === 'ubo-filters'), 'options has ubo-filters');
 });
 
-test('the uBO source is opt-in in background and options', () => {
+test('the uBO source is on by default in background and options', () => {
   const match = /const defaultEnabled = (\[[^\n]*\]);/.exec(background);
   assert.ok(match, 'background has a defaultEnabled list');
-  assert.ok(!vm.runInNewContext(`${match[1]};`).includes('ubo-filters'));
-  assert.ok(constArray(options, 'OPTIONAL_LIST_IDS').includes('ubo-filters'));
-  assert.ok(!constArray(options, 'BASE_LIST_IDS').includes('ubo-filters'));
+  assert.ok(vm.runInNewContext(`${match[1]};`).includes('ubo-filters'));
+  assert.ok(constArray(options, 'BASE_LIST_IDS').includes('ubo-filters'));
 });
