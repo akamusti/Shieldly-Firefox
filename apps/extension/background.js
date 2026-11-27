@@ -625,10 +625,17 @@ function settingFor(host, key, fallback) {
   return fallback;
 }
 
+// YTROADMAP Faz 1: the YouTube switch is per-site, not a global list removal.
+function isYouTubeHost(host) {
+  const value = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+  return value === 'youtube.com' || value.endsWith('.youtube.com') || value === 'youtu.be';
+}
+
 function isSiteDisabled(host) {
   if (disabledSites.includes(host)) return true;
   const site = siteSettings[host];
-  return !!site && site.enabled === false;
+  if (site && site.enabled === false) return true;
+  return isYouTubeHost(host) && !!site && site.youtubeAdBlocking === false;
 }
 
 async function refreshState(keys) {
@@ -805,6 +812,7 @@ async function fetchLists() {
 let pendingBlocked = 0;
 let pendingSites = {};
 let pendingHidden = 0;
+let pendingSiteHidden = {};
 let pendingLog = [];
 let flushTimer = null;
 
@@ -844,12 +852,14 @@ function scheduleFlush() {
 }
 
 // Cosmetic hides are tracked separately from blocks: they remove no request.
-function noteHidden(tabId, count) {
+function noteHidden(tabId, count, hostname = '') {
   const n = Math.max(0, Math.floor(Number(count) || 0));
   if (n === 0) return;
   if (typeof tabId === 'number' && tabId >= 0) {
     tabHidden.set(tabId, (tabHidden.get(tabId) || 0) + n);
   }
+  const site = String(hostname || '').toLowerCase().replace(/\.$/, '');
+  if (site) pendingSiteHidden[site] = (pendingSiteHidden[site] || 0) + n;
   pendingHidden += n;
   scheduleFlush();
 }
@@ -880,16 +890,26 @@ async function flushStats() {
   const blockedInc = pendingBlocked;
   const siteInc = pendingSites;
   const hiddenInc = pendingHidden;
+  const hiddenSiteInc = pendingSiteHidden;
   const logs = pendingLog;
   pendingBlocked = 0;
   pendingSites = {};
   pendingHidden = 0;
+  pendingSiteHidden = {};
   pendingLog = [];
   if (!blockedInc && !hiddenInc && !logs.length) return;
 
-  if (hiddenInc) {
-    const { cosmeticHidden = 0 } = await browser.storage.local.get('cosmeticHidden');
-    await browser.storage.local.set({ cosmeticHidden: cosmeticHidden + hiddenInc });
+  if (hiddenInc || Object.keys(hiddenSiteInc).length) {
+    const { cosmeticHidden = 0, siteHiddenStats = {} } =
+      await browser.storage.local.get(['cosmeticHidden', 'siteHiddenStats']);
+    const nextHiddenSites = { ...siteHiddenStats };
+    for (const [host, count] of Object.entries(hiddenSiteInc)) {
+      nextHiddenSites[host] = (nextHiddenSites[host] || 0) + count;
+    }
+    await browser.storage.local.set({
+      cosmeticHidden: cosmeticHidden + hiddenInc,
+      siteHiddenStats: nextHiddenSites,
+    });
   }
 
   if (blockedInc || logs.length) {
@@ -930,7 +950,7 @@ browser.runtime.onStartup.addListener(async () => {
 browser.runtime.onInstalled.addListener(async () => {
   const st = await browser.storage.local.get('enabled');
   if (st.enabled === undefined) {
-    await browser.storage.local.set({ enabled: true, blocked: 0, disabledSites: [], siteSettings: {}, customFilterLists: [] });
+    await browser.storage.local.set({ enabled: true, blocked: 0, disabledSites: [], siteSettings: {}, siteHiddenStats: {}, customFilterLists: [] });
   }
   const { webRtcProtection = false } = await browser.storage.local.get('webRtcProtection');
   await applyWebRtcProtection(webRtcProtection);
@@ -965,8 +985,15 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return undefined;
   }
   if (msg && msg.type === 'cosmeticStats') {
-    const tabId = sender && sender.tab && typeof sender.tab.id === 'number' ? sender.tab.id : -1;
-    noteHidden(tabId, msg.hidden);
+    const tab = sender && sender.tab;
+    const tabId = tab && typeof tab.id === 'number' ? tab.id : -1;
+    let hostname = '';
+    try {
+      hostname = new URL(tab && tab.url).hostname;
+    } catch {
+      // Internal page or no tab URL: keep only the per-tab counter.
+    }
+    noteHidden(tabId, msg.hidden, hostname);
     sendResponse({ ok: true });
     return true;
   }

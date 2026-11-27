@@ -15,9 +15,11 @@ const els = {
   reloadTab: document.getElementById('reloadTab'),
   pageBlocked: document.getElementById('pageBlocked'),
   pagePct: document.getElementById('pagePct'),
+  pageHidden: document.getElementById('pageHidden'),
   siteCookies: document.getElementById('siteCookies'),
   siteScripts: document.getElementById('siteScripts'),
   siteCosmetic: document.getElementById('siteCosmetic'),
+  siteYouTube: document.getElementById('siteYouTube'),
   picker: document.getElementById('picker'),
   openLog: document.getElementById('openLog'),
   openOptions: document.getElementById('openOptions'),
@@ -32,7 +34,7 @@ const els = {
 let host = '';
 let tabId = -1;
 let state = {};
-let stats = { count: 0, seen: 0 };
+let stats = { count: 0, seen: 0, hidden: 0 };
 let dirty = false;
 
 async function currentTab() {
@@ -60,6 +62,7 @@ async function fetchStats() {
         stats = {
           count: Number(res.count) || 0,
           seen: Number(res.seen) || 0,
+          hidden: Number(res.hidden) || 0,
         };
         return stats;
       }
@@ -70,8 +73,14 @@ async function fetchStats() {
   stats = {
     count: (state.siteStats && state.siteStats[host]) || 0,
     seen: 0,
+    hidden: (state.siteHiddenStats && state.siteHiddenStats[host]) || 0,
   };
   return stats;
+}
+
+function isYouTubeHost(value) {
+  const name = String(value || '').trim().toLowerCase().replace(/\.$/, '');
+  return name === 'youtube.com' || name.endsWith('.youtube.com') || name === 'youtu.be';
 }
 
 function splitHost(value) {
@@ -120,15 +129,22 @@ function render() {
   const percent = total > 0 ? Math.min(100, Math.round((blocked * 100) / total)) : 0;
   els.pageBlocked.textContent = blocked.toLocaleString();
   els.pagePct.textContent = total > 0 ? ` (${percent}%)` : '';
+  els.pageHidden.textContent = (stats.hidden || 0).toLocaleString();
 
   setSwitch(els.siteCookies, effective(site, 'cookieProtection', cookieProtection));
   setSwitch(els.siteScripts, effective(site, 'scriptControl', scriptControl));
   setSwitch(els.siteCosmetic, effective(site, 'cosmeticFiltering', true));
   setSwitch(els.globalToggle, enabled);
 
+  // The YouTube switch only exists on YouTube; it is on out of the box.
+  const youtube = isYouTubeHost(host);
+  els.siteYouTube.hidden = !youtube;
+  setSwitch(els.siteYouTube, effective(site, 'youtubeAdBlocking', true));
+
   for (const button of [els.siteCookies, els.siteScripts, els.siteCosmetic, els.picker]) {
     button.disabled = !host;
   }
+  els.siteYouTube.disabled = !youtube;
   els.reloadTab.classList.toggle('visible', dirty && tabId >= 0);
   renderFirewall();
 }
@@ -174,7 +190,7 @@ function renderFirewall() {
 
 async function load() {
   state = await api.storage.local.get([
-    'enabled', 'disabledSites', 'siteSettings', 'siteStats',
+    'enabled', 'disabledSites', 'siteSettings', 'siteStats', 'siteHiddenStats',
     'cookieProtection', 'scriptControl', 'dynamicRules',
   ]);
   await fetchStats();
@@ -182,7 +198,7 @@ async function load() {
 }
 
 async function refreshStats() {
-  const fresh = await api.storage.local.get(['siteStats']);
+  const fresh = await api.storage.local.get(['siteStats', 'siteHiddenStats']);
   state = { ...state, ...fresh };
   await fetchStats();
   render();
@@ -264,6 +280,8 @@ els.siteScripts.addEventListener('click', async () => {
 
 els.siteCosmetic.addEventListener('click', () => toggleModule('cosmeticFiltering', true));
 
+els.siteYouTube.addEventListener('click', () => toggleModule('youtubeAdBlocking', true));
+
 for (const button of els.fwSet) {
   button.addEventListener('click', async () => {
     if (!host) return;
@@ -323,7 +341,8 @@ api.storage.onChanged.addListener((changes, area) => {
   }
   if (
     changes.enabled || changes.disabledSites || changes.siteSettings ||
-    changes.cookieProtection || changes.scriptControl || changes.dynamicRules
+    changes.cookieProtection || changes.scriptControl || changes.dynamicRules ||
+    changes.siteHiddenStats
   ) {
     load();
   }

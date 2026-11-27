@@ -139,6 +139,7 @@
     }
     .tool:hover:not(:disabled) { background: var(--panel-2); color: #cfdaea; }
     .tool:disabled { opacity: 0.45; }
+    .tool[hidden] { display: none; }
     .tool .icon { position: relative; display: grid; place-items: center; height: 24px; width: 24px; }
     .tool .icon svg { width: 21px; height: 21px; }
     .tool .caption { font-size: 10px; line-height: 1.15; text-align: center; }
@@ -215,6 +216,8 @@
   <section id="basicStats" aria-label="Statistics">
     <span class="stat-label">Blocked on this page</span>
     <span class="stat-value"><span id="pageBlocked">0</span><span class="pct" id="pagePct"></span></span>
+    <span class="stat-label">Hidden on this page</span>
+    <span class="stat-value"><span id="pageHidden">0</span></span>
   </section>
 
   <div id="extraTools" class="toolRibbon" aria-label="Site controls">
@@ -260,6 +263,20 @@
         </span>
       </span>
       <span class="caption">Hide ads</span>
+    </button>
+    <button class="tool" id="siteYouTube" role="switch" aria-checked="true" data-on="true" hidden title="Block ads on YouTube (on by default)">
+      <span class="icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2.5" y="5" width="19" height="14" rx="4" />
+          <path d="m10 9 5 3-5 3Z" />
+        </svg>
+        <span class="nope" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <path d="M4 4l16 16" />
+          </svg>
+        </span>
+      </span>
+      <span class="caption">YouTube ads</span>
     </button>
   </div>
 
