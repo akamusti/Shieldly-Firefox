@@ -36,6 +36,14 @@
       if (EMPTY_ARRAYS.indexOf(field) !== -1 && Array.isArray(value[field])) value[field] = [];
       else delete value[field];
     }
+    // AdGuard also prunes the server-side ad insertion config and the
+    // DASH manifest URL that carries stitched ad segments.
+    if (value.playerConfig && typeof value.playerConfig === 'object') {
+      delete value.playerConfig.ssapConfig;
+    }
+    if (value.streamingData && typeof value.streamingData === 'object') {
+      delete value.streamingData.serverAbrStreamingUrl;
+    }
     // Some clients nest a second playerResponse inside the outer response.
     for (var key in value) {
       if (Object.prototype.hasOwnProperty.call(value, key)) prune(value[key]);
@@ -60,10 +68,34 @@
   // endpoints that carry player JSON (same idea as uBO's json-prune-xhr).
   var XHR_URLS = typeof WeakMap === 'function' ? new WeakMap() : null;
 
+  // uBO/AdGuard target all of these: the watch/playlist page XHRs also carry
+  // an embedded player response, not only the youtubei player endpoint.
   function isPlayerEndpoint(url) {
     var value = String(url || '');
-    if (!/\/youtubei\/v\d+\/player(?:[?/#]|$)/i.test(value)) return false;
-    return /(^|\.)youtube\.com/i.test(value) || value.indexOf('/youtubei/') === 0;
+    if (!/(^|\.)youtube\.com/i.test(value) && value.indexOf('/youtubei/') !== 0 && value.indexOf('/watch') !== 0) {
+      return false;
+    }
+    return /\/youtubei\/v\d+\/(player|get_watch|resolve_url|reel_watch_sequence)(?:[?/#]|$)/i.test(value) ||
+      /\/watch(?:[?/#]|$)/i.test(value) ||
+      /\/playlist(?:[?/#]|$)/i.test(value);
+  }
+
+  // AdGuard rewrites this exact guard in the player runtime so a response
+  // without adPlacements/adSlots is treated as "no ad break".
+  function isPlayerScript(url) {
+    var value = String(url || '');
+    return /(^|\.)youtube\.com/i.test(value) && /\/s\/player\/[^/]+\/base\.js(?:[?]|$)/i.test(value);
+  }
+
+  function sanitizeScriptText(text) {
+    if (!active || typeof text !== 'string') return text;
+    return text.replace(/if\(!([A-Za-z_$][\w$]*)\|\|!\1\.adPlacements&&!\1\.adSlots\)/g, 'if(!$1||0)');
+  }
+
+  function sanitizeTextForUrl(text, url) {
+    if (isPlayerScript(url)) return sanitizeScriptText(text);
+    if (isPlayerEndpoint(url)) return sanitizeJsonText(text);
+    return text;
   }
 
   function sanitizeJsonText(text) {
@@ -94,7 +126,7 @@
           enumerable: textDesc.enumerable,
           get: function () {
             var value = textDesc.get.call(this);
-            return isPlayerEndpoint(XHR_URLS.get(this) || '') ? sanitizeJsonText(value) : value;
+            return sanitizeTextForUrl(value, XHR_URLS.get(this) || '');
           },
         });
       }
@@ -123,11 +155,14 @@
       win.fetch = function (input) {
         var url = typeof input === 'string' ? input : (input && input.url) || '';
         var result = original.apply(this, arguments);
-        if (!isPlayerEndpoint(url) || !result || typeof result.then !== 'function') return result;
+        var target = String(url || '');
+        if ((!isPlayerEndpoint(target) && !isPlayerScript(target)) || !result || typeof result.then !== 'function') {
+          return result;
+        }
         return result.then(function (response) {
           if (!response || typeof response.clone !== 'function' || typeof response.text !== 'function') return response;
           return response.clone().text().then(function (text) {
-            var clean = sanitizeJsonText(text);
+            var clean = sanitizeTextForUrl(text, target);
             if (clean === text) return response;
             var headers = response.headers;
             if (typeof win.Headers === 'function' && headers) {
@@ -157,6 +192,12 @@
       return false;
     }
   }
+
+  // Captured at document_start, before YouTube can tamper with timers
+  // (uBO's nano-stb / AdGuard's adjust-setTimeout address the same issue).
+  var nativeSetInterval = typeof window !== 'undefined' && typeof window.setInterval === 'function'
+    ? window.setInterval
+    : null;
 
   var active = true;
   var installed = false;
@@ -198,8 +239,86 @@
     }
   }
 
+  var AD_HIDE_SELECTORS = [
+    '.ytp-ad-overlay-container',
+    '.ytp-ad-text-overlay',
+    '.ytp-ad-image-overlay',
+    'ytd-ad-slot-renderer',
+    'ytd-promoted-sparkles-web-renderer',
+    'ytd-inline-survey-renderer',
+  ];
+
+  function installAdCss(doc) {
+    if (!doc || !doc.documentElement || doc.getElementById('shieldly-youtube-ads')) return false;
+    try {
+      var style = doc.createElement('style');
+      style.id = 'shieldly-youtube-ads';
+      style.textContent = AD_HIDE_SELECTORS.map(function (s) {
+        return s + ' { display: none !important; }';
+      }).join('\n');
+      (doc.head || doc.documentElement).appendChild(style);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Last-resort layer for ads stitched into the video stream: watch for the
+  // player's `ad-showing` state, click its skip button, or fast-forward.
+  function installAdSkipper(win) {
+    var doc = win && win.document;
+    var interval = nativeSetInterval || (win && win.setInterval);
+    if (!doc || typeof interval !== 'function') return false;
+    interval(function () {
+      if (!active) return;
+      var player = doc.getElementById('movie_player') || doc.querySelector('.html5-video-player');
+      if (!player) return;
+
+      // uBO's current YouTube fix: stitched (SSAP) ads are reported here.
+      var stats = typeof player.getStatsForNerds === 'function' ? player.getStatsForNerds() : null;
+      var debug = stats && stats.debug_info ? String(stats.debug_info) : '';
+      var adShowing = debug.indexOf('SSAP, AD') === 0 ||
+        !!(player.classList && player.classList.contains('ad-showing'));
+      if (!adShowing) return;
+
+      var buttons = doc.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, button[class*="ytp-ad-skip"]');
+      for (var i = 0; i < buttons.length; i += 1) {
+        try {
+          if (buttons[i].offsetParent !== null && typeof buttons[i].click === 'function') {
+            buttons[i].click();
+            return;
+          }
+        } catch (e) { /* detached button */ }
+      }
+
+      // uBO seeks past the ad through the player API, which works even when
+      // the ad is stitched into the stream and has no skip button.
+      var progress = typeof player.getProgressState === 'function' ? player.getProgressState() : null;
+      if (progress && progress.duration > 0 && typeof player.seekTo === 'function') {
+        try {
+          player.seekTo(progress.duration, true);
+          return;
+        } catch (e) { /* player not ready */ }
+      }
+      var video = doc.querySelector('video');
+      if (!video) return;
+      try {
+        var duration = video.duration;
+        if (isFinite(duration) && duration > 1 && video.currentTime < duration - 1) {
+          video.currentTime = duration - 0.2;
+        }
+      } catch (e) { /* media not ready yet */ }
+    }, 300);
+    return true;
+  }
+
   function setActive(value) {
     active = value !== false;
+    if (typeof document !== 'undefined') {
+      var style = document.getElementById('shieldly-youtube-ads');
+      if (active && !style) installAdCss(document);
+      if (!active && style && typeof style.remove === 'function') style.remove();
+    }
   }
 
   function onMessage(event) {
@@ -212,9 +331,14 @@
     isYouTubeHost: isYouTubeHost,
     sanitizePlayerResponse: sanitizePlayerResponse,
     isPlayerEndpoint: isPlayerEndpoint,
+    isPlayerScript: isPlayerScript,
     sanitizeJsonText: sanitizeJsonText,
+    sanitizeScriptText: sanitizeScriptText,
+    sanitizeTextForUrl: sanitizeTextForUrl,
     installXhrHook: installXhrHook,
     installFetchHook: installFetchHook,
+    installAdCss: installAdCss,
+    installAdSkipper: installAdSkipper,
     installPlayerHook: installPlayerHook,
     uninstallPlayerHook: uninstallPlayerHook,
     setActive: setActive,
@@ -228,6 +352,8 @@
       installPlayerHook(window);
       installXhrHook(window);
       installFetchHook(window);
+      installAdCss(typeof document !== 'undefined' ? document : null);
+      installAdSkipper(window);
       if (window.addEventListener) window.addEventListener('message', onMessage, true);
     }
   }

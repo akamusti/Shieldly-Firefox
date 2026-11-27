@@ -134,6 +134,46 @@ test('fetch responses from the player endpoint are sanitized and preserve status
   assert.equal(JSON.parse(await paused.text()).playerAds.length, 1);
 });
 
+test('uBO/AdGuard endpoints and player script guard are recognized', () => {
+  const { api } = loadPlayer('www.youtube.com');
+  assert.equal(api.isPlayerEndpoint('https://www.youtube.com/youtubei/v1/get_watch?key=x'), true);
+  assert.equal(api.isPlayerEndpoint('https://www.youtube.com/watch?v=abc'), true);
+  assert.equal(api.isPlayerEndpoint('https://www.youtube.com/playlist?list=abc'), true);
+  assert.equal(api.isPlayerEndpoint('https://www.youtube.com/feed/you'), false);
+  assert.equal(api.isPlayerScript('https://www.youtube.com/s/player/abc/base.js?v=1'), true);
+
+  const script = 'if(!U||!U.adPlacements&&!U.adSlots){breaks();}';
+  assert.equal(api.sanitizeScriptText(script), 'if(!U||0){breaks();}');
+});
+
+test('stitched (SSAP) ads are skipped through the player API', () => {
+  let scan = null;
+  const seekCalls = [];
+  const player = {
+    classList: { contains: () => false },
+    getStatsForNerds: () => ({ debug_info: 'SSAP, AD, ...' }),
+    getProgressState: () => ({ duration: 100 }),
+    seekTo: (...args) => seekCalls.push(args),
+  };
+  const doc = {
+    getElementById: (id) => (id === 'movie_player' ? player : null),
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+  const { api } = loadPlayer('www.youtube.com', {
+    document: doc,
+    setInterval: (fn) => { scan = fn; return 1; },
+  });
+
+  assert.ok(typeof scan === 'function', 'skipper installed');
+  scan();
+  assert.deepEqual(seekCalls, [[100, true]]);
+
+  api.setActive(false);
+  scan();
+  assert.equal(seekCalls.length, 1, 'paused switch leaves the page alone');
+});
+
 test('player adapter only runs on YouTube hosts', () => {
   const { api } = loadPlayer('example.com');
   assert.equal(api.isYouTubeHost('youtube.com'), true);
