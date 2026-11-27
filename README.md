@@ -13,6 +13,9 @@ Firefox (WebExtensions, Manifest V3) adapter and extension for **Shieldly** — 
 - Ongoing work: AMO submission readiness and compatibility
 
 See [`ROADMAP.md`](https://github.com/akamusti/Shieldly-Core/blob/main/ROADMAP.md) in the core repository for the overall plan.
+YouTube filtering (YTROADMAP Phase 1) is **on by default** using uBO's
+maintained rule source, with a per-site "YouTube ads" switch in the popup.
+In-video pre-roll/mid-roll ads are not covered by this rule-based phase.
 
 ## Features
 
@@ -90,7 +93,8 @@ small "bait" ad elements visible on purpose. If a page misbehaves, disable
 - **privacy-shield-core** — shared filtering engine and packages
 - **adblock-rust** — underlying Rust engine
 - **EasyList / EasyPrivacy**, **AdGuard**, **Peter Lowe's Blocklist** — filter lists
-- **uBlock Origin / uAssets** — tracking-parameter feed (GPLv3)
+- **uBlock Origin / uAssets** — tracking-parameter feed and default-on YouTube
+  rule source (`filters/filters.txt`, GPLv3)
 - Firefox **WebExtensions** APIs (`webRequest`, `privacy`, `menus`) — filtering
   and privacy controls
 - **uBlock Origin / AdGuard** — filter syntax and scriptlet techniques
