@@ -28,11 +28,16 @@
   // YTROADMAP Faz 2/4: the MAIN-world YouTube scriptlets cannot read extension
   // storage, so the isolated world forwards this site's toggle to them.
   if (/(^|\.)youtube\.com$|^youtu\.be$/.test(location.hostname)) {
-    api.storage.local.get('siteSettings').then((stored) => {
-      const site = (stored.siteSettings || {})[location.hostname];
-      const enabled = !site || (site.enabled !== false && site.youtubeAdBlocking !== false);
-      window.postMessage({ source: 'shieldly', type: 'youtube-toggle', enabled }, '*');
-    }).catch(() => {});
+    (async () => {
+      try {
+        const stored = await api.storage.local.get('siteSettings');
+        const site = (stored.siteSettings || {})[location.hostname];
+        const enabled = !site || (site.enabled !== false && site.youtubeAdBlocking !== false);
+        window.postMessage({ source: 'shieldly', type: 'youtube-toggle', enabled }, '*');
+      } catch (e) {
+        // Storage unavailable: the MAIN-world hook stays at its default (on).
+      }
+    })();
   }
 
   const STYLE_ID = 'privacy-shield-cosmetic';

@@ -10,13 +10,13 @@ const defuserSource = readFileSync(
 const manifest = JSON.parse(
   readFileSync(new URL('../apps/extension/manifest.json', import.meta.url), 'utf8'));
 
-function loadPlayer(host) {
+function loadPlayer(host, extra) {
   const listeners = [];
-  const win = {
+  const win = Object.assign({
     location: { hostname: host },
     addEventListener: (type, fn) => listeners.push(fn),
     dispatch: (data) => listeners.forEach((fn) => fn({ data })),
-  };
+  }, extra || {});
   const context = { window: win };
   vm.runInNewContext(playerSource, context);
   return { api: context.ShieldlyYouTube, win };
@@ -72,6 +72,66 @@ test('player hook sanitizes assignments and follows the per-site toggle', () => 
   win.dispatch({ source: 'shieldly', type: 'youtube-toggle', enabled: true });
   win.ytInitialPlayerResponse = response;
   assert.equal(win.ytInitialPlayerResponse.adPlacements.length, 0);
+});
+
+const PLAYER_JSON = JSON.stringify({
+  videoDetails: { title: 'video' },
+  adPlacements: [{ ad: 1 }],
+  playerAds: [{ ad: 2 }],
+  streamingData: { formats: ['ok'] },
+});
+
+test('XHR responses from the player endpoint are sanitized', () => {
+  function FakeXHR() {}
+  Object.defineProperty(FakeXHR.prototype, 'responseText', {
+    configurable: true,
+    get() { return this._text; },
+  });
+  FakeXHR.prototype.open = function (method, url) { this._url = url; };
+  FakeXHR.prototype.send = function () { this._text = PLAYER_JSON; };
+
+  const { win } = loadPlayer('www.youtube.com', { XMLHttpRequest: FakeXHR });
+  const player = new win.XMLHttpRequest();
+  player.open('GET', 'https://www.youtube.com/youtubei/v1/player?key=x');
+  player.send();
+  assert.equal(JSON.parse(player.responseText).adPlacements.length, 0);
+
+  const other = new win.XMLHttpRequest();
+  other.open('GET', 'https://www.youtube.com/feed/you');
+  other.send();
+  assert.equal(JSON.parse(other.responseText).adPlacements.length, 1);
+});
+
+test('fetch responses from the player endpoint are sanitized and preserve status', async () => {
+  function FakeResponse(body, init) {
+    this._body = body;
+    this.status = init.status;
+    this.statusText = init.statusText;
+    this.headers = init.headers;
+  }
+  FakeResponse.prototype.text = function () { return Promise.resolve(this._body); };
+  FakeResponse.prototype.clone = function () { return new FakeResponse(this._body, this); };
+
+  const fetchImpl = (url) => {
+    const response = new FakeResponse(PLAYER_JSON, { status: 200, statusText: 'OK', headers: {} });
+    Object.defineProperty(response, 'url', { value: String(url) });
+    return Promise.resolve(response);
+  };
+  const { win, api } = loadPlayer('www.youtube.com', {
+    fetch: fetchImpl,
+    Response: FakeResponse,
+  });
+
+  const player = await win.fetch('https://www.youtube.com/youtubei/v1/player?key=x');
+  assert.equal(player.status, 200);
+  assert.equal(JSON.parse(await player.text()).playerAds.length, 0);
+
+  const other = await win.fetch('https://www.youtube.com/feed/you');
+  assert.equal(JSON.parse(await other.text()).playerAds.length, 1);
+
+  api.setActive(false);
+  const paused = await win.fetch('https://www.youtube.com/youtubei/v1/player?key=x');
+  assert.equal(JSON.parse(await paused.text()).playerAds.length, 1);
 });
 
 test('player adapter only runs on YouTube hosts', () => {
