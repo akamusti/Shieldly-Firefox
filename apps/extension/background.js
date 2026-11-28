@@ -997,6 +997,17 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (msg && msg.type === 'youtubeDiag') {
+    (async () => {
+      try {
+        await browser.storage.local.set({ youtubeDiag: msg.data });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false });
+      }
+    })();
+    return true;
+  }
   if (msg && msg.type === 'youtubeScriptletStatus') {
     (async () => {
       try {

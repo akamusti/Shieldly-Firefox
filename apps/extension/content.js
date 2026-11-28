@@ -55,6 +55,13 @@
     window.addEventListener('message', (event) => {
       const data = event && event.data;
       if (data && data.source === 'shieldly' && data.type === 'youtube-ready') reportScriptlet();
+      if (data && data.source === 'shieldly' && data.type === 'youtube-diag') {
+        (async () => {
+          try {
+            await api.runtime.sendMessage({ type: 'youtubeDiag', data: data.data });
+          } catch (e) { /* diagnostic only */ }
+        })();
+      }
     }, true);
     setTimeout(reportScriptlet, 200);
     setTimeout(reportScriptlet, 1000);

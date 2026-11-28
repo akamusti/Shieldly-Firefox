@@ -17,6 +17,7 @@ const els = {
   pagePct: document.getElementById('pagePct'),
   pageHidden: document.getElementById('pageHidden'),
   scriptletStatus: document.getElementById('scriptletStatus'),
+  scriptletDiag: document.getElementById('scriptletDiag'),
   siteCookies: document.getElementById('siteCookies'),
   siteScripts: document.getElementById('siteScripts'),
   siteCosmetic: document.getElementById('siteCosmetic'),
@@ -136,6 +137,13 @@ function render() {
     els.scriptletStatus.textContent = state.youtubeScriptletActive === true
       ? 'Player scriptlet: aktif'
       : 'Player scriptlet: aktif değil — sayfayı yenileyin';
+    const diag = state.youtubeDiag;
+    els.scriptletDiag.hidden = !diag;
+    if (diag) {
+      els.scriptletDiag.textContent =
+        `Yanıt: ${diag.responses || 0} · Reklam alanı: ${diag.adFields || 0} · SSAP: ${diag.stitched || 0}` +
+        (diag.debug ? ` · ${diag.debug}` : '');
+    }
   }
 
   setSwitch(els.siteCookies, effective(site, 'cookieProtection', cookieProtection));
@@ -197,7 +205,7 @@ function renderFirewall() {
 
 async function load() {
   state = await api.storage.local.get([
-    'enabled', 'disabledSites', 'siteSettings', 'siteStats', 'siteHiddenStats', 'youtubeScriptletActive',
+    'enabled', 'disabledSites', 'siteSettings', 'siteStats', 'siteHiddenStats', 'youtubeScriptletActive', 'youtubeDiag',
     'cookieProtection', 'scriptControl', 'dynamicRules',
   ]);
   await fetchStats();
@@ -349,7 +357,7 @@ api.storage.onChanged.addListener((changes, area) => {
   if (
     changes.enabled || changes.disabledSites || changes.siteSettings ||
     changes.cookieProtection || changes.scriptControl || changes.dynamicRules ||
-    changes.siteHiddenStats || changes.youtubeScriptletActive
+    changes.siteHiddenStats || changes.youtubeScriptletActive || changes.youtubeDiag
   ) {
     load();
   }

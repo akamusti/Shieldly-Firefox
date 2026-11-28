@@ -51,6 +51,10 @@
     } catch (e) {
       return response;
     }
+    var found = 0;
+    for (var d = 0; d < AD_FIELDS.length; d += 1) if (AD_FIELDS[d] in copy) found += 1;
+    diagnostics.responses += 1;
+    diagnostics.adFields += found;
     prune(copy);
     return copy;
   }
@@ -176,6 +180,17 @@
   var nativeSetInterval = typeof window !== 'undefined' && typeof window.setInterval === 'function'
     ? window.setInterval
     : null;
+
+  var diagnostics = { responses: 0, adFields: 0, stitched: 0, debug: '' };
+
+  function snapshotDiagnostics() {
+    return {
+      responses: diagnostics.responses,
+      adFields: diagnostics.adFields,
+      stitched: diagnostics.stitched,
+      debug: String(diagnostics.debug || '').slice(0, 60),
+    };
+  }
 
   var active = true;
   var installed = false;
@@ -312,6 +327,8 @@
       var stats = typeof player.getStatsForNerds === 'function' ? player.getStatsForNerds() : null;
       var debug = stats && stats.debug_info ? String(stats.debug_info) : '';
       var stitched = debug.indexOf('SSAP, AD') === 0;
+      diagnostics.debug = debug;
+      if (stitched) diagnostics.stitched += 1;
       var adShowing = stitched || !!(player.classList && player.classList.contains('ad-showing'));
       if (!adShowing) return;
 
@@ -364,6 +381,7 @@
     installAdSkipper: installAdSkipper,
     installSsapTracker: installSsapTracker,
     skipSsapEntity: skipSsapEntity,
+    diagnostics: snapshotDiagnostics,
     installPlayerHook: installPlayerHook,
     uninstallPlayerHook: uninstallPlayerHook,
     setActive: setActive,
@@ -383,6 +401,9 @@
           }
           if (window.postMessage) {
             window.postMessage({ source: 'shieldly', type: 'youtube-ready' }, '*');
+            window.postMessage({
+              source: 'shieldly', type: 'youtube-diag', data: snapshotDiagnostics(),
+            }, '*');
           }
         } catch (e) { /* diagnostic only */ }
       }
