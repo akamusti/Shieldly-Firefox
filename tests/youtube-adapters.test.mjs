@@ -141,6 +141,23 @@ test('uBO/AdGuard player endpoints are recognized', () => {
   assert.equal(api.isPlayerEndpoint('https://www.youtube.com/playlist?list=abc'), true);
   assert.equal(api.isPlayerEndpoint('https://www.youtube.com/youtubei/v1/resolve_url?key=x'), true);
   assert.equal(api.isPlayerEndpoint('https://www.youtube.com/feed/you'), false);
+  assert.equal(api.isPlayerScript('https://www.youtube.com/s/player/abc/base.js?v=1'), true);
+  const script = 'if(!U||!U.adPlacements&&!U.adSlots){breaks();}';
+  assert.equal(api.sanitizeScriptText(script), 'if(!U||0){breaks();}');
+});
+
+test('sandboxed iframe inherits the wrapped fetch/Request', () => {
+  const fetchImpl = () => Promise.resolve({});
+  const { api, win } = loadPlayer('www.youtube.com', {
+    fetch: fetchImpl,
+    Request: class FakeRequest {},
+    Node: { prototype: { appendChild(node) { return node; } } },
+  });
+  assert.equal(api.installIframeBridge(win), true);
+  const iframe = { tagName: 'IFRAME', src: 'about:blank', contentWindow: {} };
+  win.Node.prototype.appendChild.call({}, iframe);
+  assert.equal(iframe.contentWindow.fetch, win.fetch);
+  assert.equal(iframe.contentWindow.Request, win.Request);
 });
 
 test('stitched (SSAP) ads are skipped through the player API', () => {

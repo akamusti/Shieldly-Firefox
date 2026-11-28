@@ -36,6 +36,15 @@
       if (EMPTY_ARRAYS.indexOf(field) !== -1 && Array.isArray(value[field])) value[field] = [];
       else delete value[field];
     }
+    // SSAP / server-side ad insertion lives in these two fields. AdGuard's
+    // active rules prune both; without them video ads are stitched into the
+    // stream and no client-side ad field ever appears.
+    if (value.playerConfig && typeof value.playerConfig === 'object') {
+      delete value.playerConfig.ssapConfig;
+    }
+    if (value.streamingData && typeof value.streamingData === 'object') {
+      delete value.streamingData.serverAbrStreamingUrl;
+    }
     // Some clients nest a second playerResponse inside the outer response.
     for (var key in value) {
       if (Object.prototype.hasOwnProperty.call(value, key)) prune(value[key]);
@@ -76,7 +85,20 @@
       /\/playlist(?:[?/#]|$)/i.test(value);
   }
 
+  // AdGuard still rewrites this guard in the player runtime: a response with
+  // no adPlacements/adSlots must be treated as "no ad break".
+  function isPlayerScript(url) {
+    var value = String(url || '');
+    return /(^|\.)youtube\.com/i.test(value) && /\/s\/player\/[^/]+\/base\.js(?:[?]|$)/i.test(value);
+  }
+
+  function sanitizeScriptText(text) {
+    if (!active || typeof text !== 'string') return text;
+    return text.replace(/if\(!([A-Za-z_$][\w$]*)\|\|!\1\.adPlacements&&!\1\.adSlots\)/g, 'if(!$1||0)');
+  }
+
   function sanitizeTextForUrl(text, url) {
+    if (isPlayerScript(url)) return sanitizeScriptText(text);
     return isPlayerEndpoint(url) ? sanitizeJsonText(text) : text;
   }
 
@@ -140,7 +162,9 @@
           (input && input.url) || (input && input.href) || '';
         var result = original.apply(this, arguments);
         var target = String(url || '');
-        if (!isPlayerEndpoint(target) || !result || typeof result.then !== 'function') return result;
+        if ((!isPlayerEndpoint(target) && !isPlayerScript(target)) || !result || typeof result.then !== 'function') {
+          return result;
+        }
         return result.then(function (response) {
           if (!response || typeof response.clone !== 'function' || typeof response.text !== 'function') return response;
           return response.clone().text().then(function (text) {
@@ -180,6 +204,30 @@
   var nativeSetInterval = typeof window !== 'undefined' && typeof window.setInterval === 'function'
     ? window.setInterval
     : null;
+
+  // YouTube obtains untouched native fetch/Request from a sandboxed
+  // about:blank iframe. AdGuard works around it by copying our wrappers into
+  // that iframe as soon as it is attached.
+  function installIframeBridge(win) {
+    var proto = win && win.Node && win.Node.prototype;
+    if (!proto || typeof proto.appendChild !== 'function') return false;
+    var original = proto.appendChild;
+    try {
+      proto.appendChild = function () {
+        var node = original.apply(this, arguments);
+        try {
+          if (node && node.tagName === 'IFRAME' && String(node.src).indexOf('about:blank') !== -1 && node.contentWindow) {
+            if (typeof win.fetch === 'function') node.contentWindow.fetch = win.fetch;
+            if (typeof win.Request === 'function') node.contentWindow.Request = win.Request;
+          }
+        } catch (e) { /* cross-origin or detached iframe */ }
+        return node;
+      };
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
   var diagnostics = { responses: 0, adFields: 0, stitched: 0, debug: '' };
 
@@ -283,8 +331,10 @@
               ssapCapturing = true;
             }
             if (ssapCapturing && entry.start !== 0 && ssapIds.indexOf(entry.id) === -1) {
-              ssapEntities.push(entry);
-              ssapIds.push(entry.id);
+              // Bypass our own patch: real MAIN world has window.Array === Array,
+              // so a plain .push() here would recurse into this hook.
+              originalPush.call(ssapEntities, entry);
+              originalPush.call(ssapIds, entry.id);
             }
           }
         } catch (e) { /* unrelated array push */ }
@@ -342,13 +392,11 @@
         } catch (e) { /* detached button */ }
       }
 
-      // Only seek for the stitched case — seeking a normal ad that is not
-      // actually stitched can break playback with a playability error.
-      if (stitched) {
-        var progress = typeof player.getProgressState === 'function' ? player.getProgressState() : null;
-        if (progress && progress.duration > 0 && typeof player.seekTo === 'function') {
-          try { player.seekTo(progress.duration, true); } catch (e) { /* not ready */ }
-        }
+      // uBO's player fix seeks to the end both for stitched ads and for the
+      // old ad-showing state when no native skip control is available.
+      var progress = typeof player.getProgressState === 'function' ? player.getProgressState() : null;
+      if (progress && progress.duration > 0 && typeof player.seekTo === 'function') {
+        try { player.seekTo(progress.duration, true); } catch (e) { /* not ready */ }
       }
     }, 300);
     return true;
@@ -373,10 +421,13 @@
     isYouTubeHost: isYouTubeHost,
     sanitizePlayerResponse: sanitizePlayerResponse,
     isPlayerEndpoint: isPlayerEndpoint,
+    isPlayerScript: isPlayerScript,
     sanitizeJsonText: sanitizeJsonText,
+    sanitizeScriptText: sanitizeScriptText,
     sanitizeTextForUrl: sanitizeTextForUrl,
     installXhrHook: installXhrHook,
     installFetchHook: installFetchHook,
+    installIframeBridge: installIframeBridge,
     installAdCss: installAdCss,
     installAdSkipper: installAdSkipper,
     installSsapTracker: installSsapTracker,
@@ -424,6 +475,7 @@
       installPlayerHook(window);
       installXhrHook(window);
       installFetchHook(window);
+      installIframeBridge(window);
       installSsapTracker(window);
       installAdCss(typeof document !== 'undefined' ? document : null);
       installAdSkipper(window);
