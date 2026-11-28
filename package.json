@@ -1,6 +1,6 @@
 {
   "name": "privacy-shield-firefox",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "private": true,
   "description": "Firefox (WebExtensions) adapter and extension for Shieldly.",
   "scripts": {
