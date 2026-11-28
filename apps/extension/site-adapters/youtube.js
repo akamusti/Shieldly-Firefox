@@ -15,7 +15,9 @@
   // Mirrored from @privacy-shield/shared (YOUTUBE_AD_PLAYER_FIELDS).
   var AD_FIELDS = [
     'adPlacements', 'playerAds', 'adSlots', 'adBreak', 'adBreaks',
-    'instreamAdBreak', 'instreamAds',
+    'instreamAdBreak', 'instreamAds', 'adBreakHeartbeatParams',
+    'playerAd', 'adServingData', 'adServingContext', 'adClientParams',
+    'adSlotRenderer', 'playerLegacyAd',
   ];
   var EMPTY_ARRAYS = ['adPlacements', 'playerAds', 'adSlots'];
 
@@ -80,9 +82,10 @@
     if (!/(^|\.)youtube\.com/i.test(value) && value.indexOf('/youtubei/') !== 0 && value.indexOf('/watch') !== 0) {
       return false;
     }
-    return /\/youtubei\/v\d+\/(player|get_watch|resolve_url|reel_watch_sequence)(?:[?/#]|$)/i.test(value) ||
+    return /\/youtubei\/v\d+\/(player|get_watch|resolve_url|reel_watch_sequence|next|browse)(?:[?/#]|$)/i.test(value) ||
       /\/watch(?:[?/#]|$)/i.test(value) ||
-      /\/playlist(?:[?/#]|$)/i.test(value);
+      /\/playlist(?:[?/#]|$)/i.test(value) ||
+      /\/youtubei\/v\d+\/player/i.test(value);
   }
 
   // AdGuard still rewrites this guard in the player runtime: a response with
@@ -355,7 +358,9 @@
     var duration = Math.round(video.duration);
     var end = Math.round(last.end / 1000);
     var ids = ssapIds.join(',');
-    if (!isFinite(duration) || !duration || duration !== end || ssapSeen === ids) return false;
+    // Tolerate a second or two of drift: YouTube rounds the ad entity end
+    // differently from video.duration (mid-rolls rarely match exactly).
+    if (!isFinite(duration) || duration <= 0 || Math.abs(duration - end) > 2 || ssapSeen === ids) return false;
     var start = last.start / 1000;
     if (video.currentTime < start) video.currentTime = start;
     ssapCapturing = false;
@@ -363,7 +368,7 @@
     return true;
   }
 
-  var SKIP_LABEL = /^(atla|skip|saltar|pular|跳过|hoppa över|passer l'annonce)/i;
+  var SKIP_LABEL = /^(atla|reklamı atla|skip|skip ad|saltar|pular|跳过|hoppa över|passer l'annonce|annonsen hoppa|пропустить)/i;
 
   function isVisible(node) {
     return !!node && (typeof node.offsetParent === 'undefined' || node.offsetParent !== null);
@@ -373,6 +378,7 @@
     var selectors = [
       '.ytp-ad-skip-button', '.ytp-ad-skip-button-modern',
       '[class*="ad-skip"]', '[class*="skip-ad"]', 'button[class*="skip"]',
+      '.ytp-ad-skip-button-container button', '[aria-label*="Skip"]', '[aria-label*="Atla"]',
     ];
     for (var s = 0; s < selectors.length; s += 1) {
       var nodes = doc.querySelectorAll(selectors[s]);

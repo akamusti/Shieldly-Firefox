@@ -138,11 +138,14 @@ function render() {
       ? 'Player scriptlet: aktif'
       : 'Player scriptlet: aktif değil — sayfayı yenileyin';
     const diag = state.youtubeDiag;
-    els.scriptletDiag.hidden = !diag;
-    if (diag) {
+    els.scriptletDiag.hidden = !isYouTubeHost(host);
+    if (!diag) {
+      els.scriptletDiag.textContent = 'Tanılama bekleniyor…';
+    } else {
       els.scriptletDiag.textContent =
         `Yanıt: ${diag.responses || 0} · Reklam alanı: ${diag.adFields || 0} · SSAP: ${diag.stitched || 0} · Atla: ${diag.adUi || 0}` +
-        (diag.debug ? ` · ${diag.debug}` : '');
+        (diag.debug ? ` · ${diag.debug}` : '') +
+        (diag.responses === 0 ? ' · player JSON görülmedi' : '');
     }
   }
 
