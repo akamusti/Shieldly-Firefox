@@ -229,13 +229,14 @@
     }
   }
 
-  var diagnostics = { responses: 0, adFields: 0, stitched: 0, debug: '' };
+  var diagnostics = { responses: 0, adFields: 0, stitched: 0, adUi: 0, debug: '' };
 
   function snapshotDiagnostics() {
     return {
       responses: diagnostics.responses,
       adFields: diagnostics.adFields,
       stitched: diagnostics.stitched,
+      adUi: diagnostics.adUi,
       debug: String(diagnostics.debug || '').slice(0, 60),
     };
   }
@@ -362,6 +363,40 @@
     return true;
   }
 
+  var SKIP_LABEL = /^(atla|skip|saltar|pular|跳过|hoppa över|passer l'annonce)/i;
+
+  function isVisible(node) {
+    return !!node && (typeof node.offsetParent === 'undefined' || node.offsetParent !== null);
+  }
+
+  function findSkipButton(doc) {
+    var selectors = [
+      '.ytp-ad-skip-button', '.ytp-ad-skip-button-modern',
+      '[class*="ad-skip"]', '[class*="skip-ad"]', 'button[class*="skip"]',
+    ];
+    for (var s = 0; s < selectors.length; s += 1) {
+      var nodes = doc.querySelectorAll(selectors[s]);
+      for (var i = 0; i < nodes.length; i += 1) {
+        if (isVisible(nodes[i])) return nodes[i];
+      }
+    }
+    // YouTube's current skip control is often a generic button whose label is
+    // localized ("Atla" in Turkish). Match the label as a fallback.
+    var buttons = doc.querySelectorAll('button');
+    for (var j = 0; j < buttons.length; j += 1) {
+      var text = String(buttons[j].textContent || '').trim();
+      if (SKIP_LABEL.test(text) && isVisible(buttons[j])) return buttons[j];
+    }
+    return null;
+  }
+
+  function adOverlayVisible(doc) {
+    var nodes = doc.querySelectorAll(
+      '.ytp-ad-player-overlay, .ytp-ad-text, .ytp-ad-image, ytd-ad-slot-renderer, .ad-showing');
+    for (var i = 0; i < nodes.length; i += 1) if (isVisible(nodes[i])) return true;
+    return false;
+  }
+
   function installAdSkipper(win) {
     var doc = win && win.document;
     var interval = nativeSetInterval || (win && win.setInterval);
@@ -372,28 +407,22 @@
       var player = doc.getElementById('movie_player') || doc.querySelector('.html5-video-player');
       if (!player) return;
 
-      // uBO's current YouTube fix identifies stitched ads through this exact
-      // debug flag. A plain `ad-showing` class is the older client-side path.
       var stats = typeof player.getStatsForNerds === 'function' ? player.getStatsForNerds() : null;
       var debug = stats && stats.debug_info ? String(stats.debug_info) : '';
       var stitched = debug.indexOf('SSAP, AD') === 0;
       diagnostics.debug = debug;
       if (stitched) diagnostics.stitched += 1;
-      var adShowing = stitched || !!(player.classList && player.classList.contains('ad-showing'));
-      if (!adShowing) return;
 
-      var buttons = doc.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, button[class*="ytp-ad-skip"]');
-      for (var i = 0; i < buttons.length; i += 1) {
-        try {
-          if (buttons[i].offsetParent !== null && typeof buttons[i].click === 'function') {
-            buttons[i].click();
-            return;
-          }
-        } catch (e) { /* detached button */ }
+      var skip = findSkipButton(doc);
+      var adActive = !!skip || stitched || adOverlayVisible(doc) ||
+        !!(player.classList && player.classList.contains('ad-showing'));
+      if (!adActive) return;
+      diagnostics.adUi += 1;
+
+      if (skip && typeof skip.click === 'function') {
+        try { skip.click(); return; } catch (e) { /* detached control */ }
       }
 
-      // uBO's player fix seeks to the end both for stitched ads and for the
-      // old ad-showing state when no native skip control is available.
       var progress = typeof player.getProgressState === 'function' ? player.getProgressState() : null;
       if (progress && progress.duration > 0 && typeof player.seekTo === 'function') {
         try { player.seekTo(progress.duration, true); } catch (e) { /* not ready */ }

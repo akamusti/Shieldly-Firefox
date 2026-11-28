@@ -141,7 +141,7 @@ function render() {
     els.scriptletDiag.hidden = !diag;
     if (diag) {
       els.scriptletDiag.textContent =
-        `Yanıt: ${diag.responses || 0} · Reklam alanı: ${diag.adFields || 0} · SSAP: ${diag.stitched || 0}` +
+        `Yanıt: ${diag.responses || 0} · Reklam alanı: ${diag.adFields || 0} · SSAP: ${diag.stitched || 0} · Atla: ${diag.adUi || 0}` +
         (diag.debug ? ` · ${diag.debug}` : '');
     }
   }

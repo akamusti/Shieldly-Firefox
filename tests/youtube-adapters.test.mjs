@@ -202,6 +202,29 @@ test('SSAP entities are tracked and skipped on the video timeline', () => {
   assert.equal(video.currentTime, 1);
 });
 
+test('localized Atla / Skip button is found and clicked', () => {
+  let scan = null;
+  let clicks = 0;
+  const skipButton = { textContent: 'Atla', offsetParent: {}, click: () => { clicks += 1; } };
+  const player = {
+    classList: { contains: () => false },
+    getStatsForNerds: () => ({}),
+    getProgressState: () => ({ duration: 100 }),
+    seekTo: () => { throw new Error('should not seek when a skip button exists'); },
+  };
+  const doc = {
+    getElementById: () => player,
+    querySelector: () => null,
+    querySelectorAll: (selector) => (selector === 'button' ? [skipButton] : []),
+  };
+  loadPlayer('www.youtube.com', {
+    document: doc,
+    setInterval: (fn) => { scan = fn; return 1; },
+  });
+  scan();
+  assert.equal(clicks, 1);
+});
+
 test('player adapter only runs on YouTube hosts', () => {
   const { api } = loadPlayer('example.com');
   assert.equal(api.isYouTubeHost('youtube.com'), true);
