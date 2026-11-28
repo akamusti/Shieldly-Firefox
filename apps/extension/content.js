@@ -56,7 +56,9 @@
       const data = event && event.data;
       if (data && data.source === 'shieldly' && data.type === 'youtube-ready') reportScriptlet();
     }, true);
+    setTimeout(reportScriptlet, 200);
     setTimeout(reportScriptlet, 1000);
+    setTimeout(reportScriptlet, 3000);
   }
 
   const STYLE_ID = 'privacy-shield-cosmetic';
@@ -401,6 +403,8 @@
     exceptions: new Set(),
     cachedGeneric: [],
     collapsed: [],
+    regexRemoveParams: [],
+    antiBlockerDefusing: true,
   };
 
   const caches = { generic: emptyCache(), collapse: emptyCache() };
@@ -602,6 +606,37 @@
     list.push(value);
   }
 
+  // DNR cannot express regex removeparam, so the background parses those rules
+  // and the content script applies them to the document URL. Mirrors
+  // applyRemoveParams() from @privacy-shield/network-filter.
+  const REMOVE_PARAM_DENYLIST = new Set([
+    'code', 'state', 'token', 'access_token', 'id_token', 'refresh_token',
+    'session', 'sessionid', 'session_id', 'auth', 'authorization',
+    'password', 'passwd', 'otp', 'sig', 'signature', 'redirect_uri',
+  ]);
+
+  function stripRegexParams(regexes) {
+    try {
+      const url = new URL(location.href);
+      if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.search) return;
+      const compiled = [];
+      for (const source of regexes || []) {
+        try { compiled.push(new RegExp(source)); } catch { /* ignore bad list regex */ }
+      }
+      if (!compiled.length) return;
+      const drop = [];
+      for (const name of new Set(url.searchParams.keys())) {
+        if (REMOVE_PARAM_DENYLIST.has(name.toLowerCase())) continue;
+        if (compiled.some((re) => re.test(name))) drop.push(name);
+      }
+      if (!drop.length) return;
+      for (const name of drop) url.searchParams.delete(name);
+      history.replaceState(null, '', url.href);
+    } catch {
+      // Some frames do not allow replaceState; the page still works.
+    }
+  }
+
   // Defusing is deliberately one-shot: a fixed pair of checks for late modals.
   // A MutationObserver plus full-document text scans froze busy pages.
   const NOTICE_CANDIDATES = [
@@ -689,6 +724,7 @@
       'cosmeticGeneric',
       'cosmeticExceptions',
       'customCosmetic',
+      'regexRemoveParams',
       'antiBlockerDefusing',
       GENERIC_CACHE_KEY,
       COLLAPSE_CACHE_KEY,
@@ -699,6 +735,9 @@
     const cosmeticEnabled = typeof site.cosmeticFiltering === 'boolean' ? site.cosmeticFiltering : true;
     state.active = stored.enabled !== false && !siteDisabled && cosmeticEnabled;
     state.antiBlockerDefusing = stored.antiBlockerDefusing !== false;
+
+    state.regexRemoveParams = stored.regexRemoveParams || [];
+    if (state.active) stripRegexParams(state.regexRemoveParams);
 
     caches.generic = sanitizeCache(stored[GENERIC_CACHE_KEY]);
     caches.collapse = sanitizeCache(stored[COLLAPSE_CACHE_KEY]);

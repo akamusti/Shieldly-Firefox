@@ -134,16 +134,13 @@ test('fetch responses from the player endpoint are sanitized and preserve status
   assert.equal(JSON.parse(await paused.text()).playerAds.length, 1);
 });
 
-test('uBO/AdGuard endpoints and player script guard are recognized', () => {
+test('uBO/AdGuard player endpoints are recognized', () => {
   const { api } = loadPlayer('www.youtube.com');
   assert.equal(api.isPlayerEndpoint('https://www.youtube.com/youtubei/v1/get_watch?key=x'), true);
   assert.equal(api.isPlayerEndpoint('https://www.youtube.com/watch?v=abc'), true);
   assert.equal(api.isPlayerEndpoint('https://www.youtube.com/playlist?list=abc'), true);
+  assert.equal(api.isPlayerEndpoint('https://www.youtube.com/youtubei/v1/resolve_url?key=x'), true);
   assert.equal(api.isPlayerEndpoint('https://www.youtube.com/feed/you'), false);
-  assert.equal(api.isPlayerScript('https://www.youtube.com/s/player/abc/base.js?v=1'), true);
-
-  const script = 'if(!U||!U.adPlacements&&!U.adSlots){breaks();}';
-  assert.equal(api.sanitizeScriptText(script), 'if(!U||0){breaks();}');
 });
 
 test('stitched (SSAP) ads are skipped through the player API', () => {
@@ -172,6 +169,20 @@ test('stitched (SSAP) ads are skipped through the player API', () => {
   api.setActive(false);
   scan();
   assert.equal(seekCalls.length, 1, 'paused switch leaves the page alone');
+});
+
+test('SSAP entities are tracked and skipped on the video timeline', () => {
+  const video = { duration: 50, currentTime: 0 };
+  const doc = { querySelector: () => video };
+  const { api, win } = loadPlayer('www.youtube.com', {
+    Array: class ShieldlyArray extends Array {},
+    yt: { config_: { EXPERIMENT_FLAGS: { html5_enable_ssap_entity_id: true } } },
+  });
+  assert.equal(api.installSsapTracker(win), true);
+  const list = new win.Array();
+  list.push({ namespace: 'ssap', id: 'ad-1', start: 1000, end: 50000 });
+  assert.equal(api.skipSsapEntity(doc), true);
+  assert.equal(video.currentTime, 1);
 });
 
 test('player adapter only runs on YouTube hosts', () => {

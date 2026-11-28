@@ -70,36 +70,11 @@
     defuserActive = value !== false;
   }
 
+  // Deliberately inert: rewriting playabilityStatus made YouTube show
+  // "Bir hata oluştu" instead of the notice. The player adapter owns the
+  // single ytInitialPlayerResponse accessor; this layer is CSS/DOM only.
   function installDefuser(target) {
-    if (installed) return false;
-    var owner = target || root;
-    if (!owner) return false;
-    try {
-      var descriptor = Object.getOwnPropertyDescriptor(owner, 'ytInitialPlayerResponse') || null;
-      if (descriptor && descriptor.get) previousGet = descriptor.get.bind(owner);
-      else if (descriptor && 'value' in descriptor) {
-        var initial = descriptor.value;
-        previousGet = function () { return initial; };
-      }
-      if (descriptor && descriptor.set) previousSet = descriptor.set.bind(owner);
-      Object.defineProperty(owner, 'ytInitialPlayerResponse', {
-        configurable: true,
-        enumerable: true,
-        get: function () {
-          var value = previousGet ? previousGet() : stored;
-          return defuserActive ? sanitizeEnforcementResponse(value) : value;
-        },
-        set: function (next) {
-          stored = next;
-          var value = defuserActive ? sanitizeEnforcementResponse(next) : next;
-          if (previousSet) previousSet(value);
-        },
-      });
-      installed = true;
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return false;
   }
 
   function installCss(doc) {

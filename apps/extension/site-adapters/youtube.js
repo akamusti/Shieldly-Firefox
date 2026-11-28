@@ -36,14 +36,6 @@
       if (EMPTY_ARRAYS.indexOf(field) !== -1 && Array.isArray(value[field])) value[field] = [];
       else delete value[field];
     }
-    // AdGuard also prunes the server-side ad insertion config and the
-    // DASH manifest URL that carries stitched ad segments.
-    if (value.playerConfig && typeof value.playerConfig === 'object') {
-      delete value.playerConfig.ssapConfig;
-    }
-    if (value.streamingData && typeof value.streamingData === 'object') {
-      delete value.streamingData.serverAbrStreamingUrl;
-    }
     // Some clients nest a second playerResponse inside the outer response.
     for (var key in value) {
       if (Object.prototype.hasOwnProperty.call(value, key)) prune(value[key]);
@@ -80,22 +72,8 @@
       /\/playlist(?:[?/#]|$)/i.test(value);
   }
 
-  // AdGuard rewrites this exact guard in the player runtime so a response
-  // without adPlacements/adSlots is treated as "no ad break".
-  function isPlayerScript(url) {
-    var value = String(url || '');
-    return /(^|\.)youtube\.com/i.test(value) && /\/s\/player\/[^/]+\/base\.js(?:[?]|$)/i.test(value);
-  }
-
-  function sanitizeScriptText(text) {
-    if (!active || typeof text !== 'string') return text;
-    return text.replace(/if\(!([A-Za-z_$][\w$]*)\|\|!\1\.adPlacements&&!\1\.adSlots\)/g, 'if(!$1||0)');
-  }
-
   function sanitizeTextForUrl(text, url) {
-    if (isPlayerScript(url)) return sanitizeScriptText(text);
-    if (isPlayerEndpoint(url)) return sanitizeJsonText(text);
-    return text;
+    return isPlayerEndpoint(url) ? sanitizeJsonText(text) : text;
   }
 
   function sanitizeJsonText(text) {
@@ -153,12 +131,12 @@
     var original = win.fetch;
     try {
       win.fetch = function (input) {
-        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        // uBO note: a Request uses .url, a URL object uses .href.
+        var url = typeof input === 'string' ? input :
+          (input && input.url) || (input && input.href) || '';
         var result = original.apply(this, arguments);
         var target = String(url || '');
-        if ((!isPlayerEndpoint(target) && !isPlayerScript(target)) || !result || typeof result.then !== 'function') {
-          return result;
-        }
+        if (!isPlayerEndpoint(target) || !result || typeof result.then !== 'function') return result;
         return result.then(function (response) {
           if (!response || typeof response.clone !== 'function' || typeof response.text !== 'function') return response;
           return response.clone().text().then(function (text) {
@@ -265,20 +243,76 @@
 
   // Last-resort layer for ads stitched into the video stream: watch for the
   // player's `ad-showing` state, click its skip button, or fast-forward.
+  // AdGuard's active YouTube rule tracks SSAP entities pushed by the player
+  // (namespace "ssap", start/end in microseconds) and seeks past them.
+  var ssapEntities = [];
+  var ssapIds = [];
+  var ssapCapturing = false;
+  var ssapSeen = '';
+
+  function installSsapTracker(win) {
+    var Arr = win && win.Array;
+    if (!Arr || typeof Arr.prototype.push !== 'function') return false;
+    var originalPush = Arr.prototype.push;
+    try {
+      Arr.prototype.push = function () {
+        try {
+          var entry = arguments[0];
+          var flags = win.yt && win.yt.config_ && win.yt.config_.EXPERIMENT_FLAGS;
+          if (flags && flags.html5_enable_ssap_entity_id && entry && typeof entry === 'object' &&
+              entry.namespace === 'ssap' && entry.id && typeof entry.start === 'number' &&
+              typeof entry.end === 'number') {
+            if (!ssapCapturing && entry.start !== 0 && ssapIds.indexOf(entry.id) === -1) {
+              ssapEntities.length = 0;
+              ssapIds.length = 0;
+              ssapCapturing = true;
+            }
+            if (ssapCapturing && entry.start !== 0 && ssapIds.indexOf(entry.id) === -1) {
+              ssapEntities.push(entry);
+              ssapIds.push(entry.id);
+            }
+          }
+        } catch (e) { /* unrelated array push */ }
+        return originalPush.apply(this, arguments);
+      };
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function skipSsapEntity(doc) {
+    if (!ssapEntities.length) return false;
+    var video = doc.querySelector('video');
+    if (!video) return false;
+    var last = ssapEntities[ssapEntities.length - 1];
+    var duration = Math.round(video.duration);
+    var end = Math.round(last.end / 1000);
+    var ids = ssapIds.join(',');
+    if (!isFinite(duration) || !duration || duration !== end || ssapSeen === ids) return false;
+    var start = last.start / 1000;
+    if (video.currentTime < start) video.currentTime = start;
+    ssapCapturing = false;
+    ssapSeen = ids;
+    return true;
+  }
+
   function installAdSkipper(win) {
     var doc = win && win.document;
     var interval = nativeSetInterval || (win && win.setInterval);
     if (!doc || typeof interval !== 'function') return false;
     interval(function () {
       if (!active) return;
+      if (skipSsapEntity(doc)) return;
       var player = doc.getElementById('movie_player') || doc.querySelector('.html5-video-player');
       if (!player) return;
 
-      // uBO's current YouTube fix: stitched (SSAP) ads are reported here.
+      // uBO's current YouTube fix identifies stitched ads through this exact
+      // debug flag. A plain `ad-showing` class is the older client-side path.
       var stats = typeof player.getStatsForNerds === 'function' ? player.getStatsForNerds() : null;
       var debug = stats && stats.debug_info ? String(stats.debug_info) : '';
-      var adShowing = debug.indexOf('SSAP, AD') === 0 ||
-        !!(player.classList && player.classList.contains('ad-showing'));
+      var stitched = debug.indexOf('SSAP, AD') === 0;
+      var adShowing = stitched || !!(player.classList && player.classList.contains('ad-showing'));
       if (!adShowing) return;
 
       var buttons = doc.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, button[class*="ytp-ad-skip"]');
@@ -291,23 +325,14 @@
         } catch (e) { /* detached button */ }
       }
 
-      // uBO seeks past the ad through the player API, which works even when
-      // the ad is stitched into the stream and has no skip button.
-      var progress = typeof player.getProgressState === 'function' ? player.getProgressState() : null;
-      if (progress && progress.duration > 0 && typeof player.seekTo === 'function') {
-        try {
-          player.seekTo(progress.duration, true);
-          return;
-        } catch (e) { /* player not ready */ }
-      }
-      var video = doc.querySelector('video');
-      if (!video) return;
-      try {
-        var duration = video.duration;
-        if (isFinite(duration) && duration > 1 && video.currentTime < duration - 1) {
-          video.currentTime = duration - 0.2;
+      // Only seek for the stitched case — seeking a normal ad that is not
+      // actually stitched can break playback with a playability error.
+      if (stitched) {
+        var progress = typeof player.getProgressState === 'function' ? player.getProgressState() : null;
+        if (progress && progress.duration > 0 && typeof player.seekTo === 'function') {
+          try { player.seekTo(progress.duration, true); } catch (e) { /* not ready */ }
         }
-      } catch (e) { /* media not ready yet */ }
+      }
     }, 300);
     return true;
   }
@@ -331,14 +356,14 @@
     isYouTubeHost: isYouTubeHost,
     sanitizePlayerResponse: sanitizePlayerResponse,
     isPlayerEndpoint: isPlayerEndpoint,
-    isPlayerScript: isPlayerScript,
     sanitizeJsonText: sanitizeJsonText,
-    sanitizeScriptText: sanitizeScriptText,
     sanitizeTextForUrl: sanitizeTextForUrl,
     installXhrHook: installXhrHook,
     installFetchHook: installFetchHook,
     installAdCss: installAdCss,
     installAdSkipper: installAdSkipper,
+    installSsapTracker: installSsapTracker,
+    skipSsapEntity: skipSsapEntity,
     installPlayerHook: installPlayerHook,
     uninstallPlayerHook: uninstallPlayerHook,
     setActive: setActive,
@@ -349,12 +374,38 @@
 
   if (typeof window !== 'undefined') {
     if (isYouTubeHost(window.location && window.location.hostname)) {
+      // Diagnostic first: even if a hook below fails, the popup must be able
+      // to tell whether this script ran at all.
+      function reportReady() {
+        try {
+          if (typeof document !== 'undefined' && document.documentElement) {
+            document.documentElement.setAttribute('data-shieldly-youtube', 'active');
+          }
+          if (window.postMessage) {
+            window.postMessage({ source: 'shieldly', type: 'youtube-ready' }, '*');
+          }
+        } catch (e) { /* diagnostic only */ }
+      }
+      reportReady();
+      if (window.addEventListener) {
+        window.addEventListener('DOMContentLoaded', reportReady, true);
+        window.addEventListener('message', onMessage, true);
+      }
+      var diagTimer = nativeSetInterval || window.setInterval;
+      if (typeof diagTimer === 'function') {
+        var reports = 0;
+        var diag = diagTimer(function () {
+          reportReady();
+          reports += 1;
+          if (reports >= 5 && window.clearInterval) window.clearInterval(diag);
+        }, 1000);
+      }
       installPlayerHook(window);
       installXhrHook(window);
       installFetchHook(window);
+      installSsapTracker(window);
       installAdCss(typeof document !== 'undefined' ? document : null);
       installAdSkipper(window);
-      if (window.addEventListener) window.addEventListener('message', onMessage, true);
     }
   }
 })(typeof window !== 'undefined' ? window : globalThis);
