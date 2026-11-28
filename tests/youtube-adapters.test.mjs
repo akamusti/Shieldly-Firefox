@@ -81,6 +81,25 @@ const PLAYER_JSON = JSON.stringify({
   streamingData: { formats: ['ok'] },
 });
 
+test('playback-critical streaming and SSAP config fields are preserved', () => {
+  const { api } = loadPlayer('www.youtube.com');
+  const response = {
+    adPlacements: [{ ad: 1 }],
+    playerConfig: { ssapConfig: { ssapPrerollEnabled: true, other: 'keep' } },
+    streamingData: { serverAbrStreamingUrl: 'https://manifest.example/stream', formats: ['ok'] },
+    playabilityStatus: { status: 'OK' },
+    videoDetails: { title: 'video' },
+  };
+  const clean = api.sanitizePlayerResponse(response);
+  assert.equal(clean.adPlacements.length, 0);
+  assert.ok('serverAbrStreamingUrl' in clean.streamingData, 'stream URL survives');
+  assert.ok('ssapConfig' in clean.playerConfig, 'SSAP config survives');
+  assert.equal(clean.playerConfig.ssapConfig.ssapPrerollEnabled, false);
+  assert.equal(clean.playerConfig.ssapConfig.other, 'keep');
+  assert.equal(clean.playabilityStatus.status, 'OK');
+  assert.equal(clean.videoDetails.title, 'video');
+});
+
 test('XHR responses from the player endpoint are sanitized', () => {
   function FakeXHR() {}
   Object.defineProperty(FakeXHR.prototype, 'responseText', {

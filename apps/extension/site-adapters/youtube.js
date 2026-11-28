@@ -12,14 +12,11 @@
 (function (root) {
   'use strict';
 
-  // Mirrored from @privacy-shield/shared (YOUTUBE_AD_PLAYER_FIELDS).
-  var AD_FIELDS = [
-    'adPlacements', 'playerAds', 'adSlots', 'adBreak', 'adBreaks',
-    'instreamAdBreak', 'instreamAds', 'adBreakHeartbeatParams',
-    'playerAd', 'adServingData', 'adServingContext', 'adClientParams',
-    'adSlotRenderer', 'playerLegacyAd',
-  ];
+  // Proven-safe subset. Aggressively deleting SSAP/streaming fields made
+  // YouTube show "Bir hata oluştu" on some clients — stability comes first.
+  var AD_FIELDS = ['adPlacements', 'playerAds', 'adSlots', 'adBreak', 'adBreaks'];
   var EMPTY_ARRAYS = ['adPlacements', 'playerAds', 'adSlots'];
+  var SKIP_SUBTREES = ['streamingData', 'playabilityStatus', 'videoDetails'];
 
   function isYouTubeHost(host) {
     var value = String(host || '').trim().toLowerCase().replace(/\.$/, '');
@@ -38,18 +35,20 @@
       if (EMPTY_ARRAYS.indexOf(field) !== -1 && Array.isArray(value[field])) value[field] = [];
       else delete value[field];
     }
-    // SSAP / server-side ad insertion lives in these two fields. AdGuard's
-    // active rules prune both; without them video ads are stitched into the
-    // stream and no client-side ad field ever appears.
-    if (value.playerConfig && typeof value.playerConfig === 'object') {
-      delete value.playerConfig.ssapConfig;
-    }
-    if (value.streamingData && typeof value.streamingData === 'object') {
-      delete value.streamingData.serverAbrStreamingUrl;
+    // Neutralize the SSAP preroll flag instead of deleting the config:
+    // deleting ssapConfig / serverAbrStreamingUrl broke playback on some
+    // clients ("Bir hata oluştu").
+    if (value.playerConfig && value.playerConfig.ssapConfig &&
+        typeof value.playerConfig.ssapConfig === 'object') {
+      try { value.playerConfig.ssapConfig.ssapPrerollEnabled = false; } catch (e) { /* frozen */ }
     }
     // Some clients nest a second playerResponse inside the outer response.
+    // Never walk the streaming/playability/video trees: those carry the
+    // actual media and error state.
     for (var key in value) {
-      if (Object.prototype.hasOwnProperty.call(value, key)) prune(value[key]);
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      if (SKIP_SUBTREES.indexOf(key) !== -1) continue;
+      prune(value[key]);
     }
   }
 
